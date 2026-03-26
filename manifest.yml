@@ -1,0 +1,37 @@
+modules:
+  jira:dashboardGadget:
+    - key: compliance-overview-gadget
+      title: Compliance Overview
+      description: High-level compliance status across Jira projects.
+      thumbnail: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
+      resource: main
+      resolver:
+        function: resolver
+      edit:
+        resource: main
+
+    - key: compliance-details-gadget
+      title: Compliance Details
+      description: Detailed per-issue compliance breakdown and reporting.
+      thumbnail: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
+      resource: main
+      resolver:
+        function: resolver
+      edit:
+        resource: main
+  function:
+    - key: resolver
+      handler: index.handler
+resources:
+  - key: main
+    path: static/hello-world/build
+permissions:
+  content:
+    styles:
+      - unsafe-inline
+app:
+  runtime:
+    name: nodejs24.x
+    memoryMB: 256
+    architecture: arm64
+  id: ari:cloud:ecosystem::app/a8161fad-fc13-466f-aa28-6f264f00b396

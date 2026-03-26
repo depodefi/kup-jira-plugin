@@ -1,0 +1,35 @@
+{
+  "name": "jira-dashboard-gadget-custom-ui-static",
+  "version": "0.1.67",
+  "private": true,
+  "homepage": ".",
+  "dependencies": {
+    "@atlaskit/button": "^23.0.8",
+    "@atlaskit/css-reset": "^6.6.2",
+    "@atlaskit/form": "^9.0.10",
+    "@atlaskit/textfield": "^6.0.1",
+    "@forge/bridge": "5.14.1",
+    "react": "^16",
+    "react-dom": "^16"
+  },
+  "devDependencies": {
+    "react-scripts": "^5.0.1"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "eject": "react-scripts eject"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
