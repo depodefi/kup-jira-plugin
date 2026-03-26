@@ -19,13 +19,25 @@ modules:
         function: resolver
       edit:
         resource: main
+  jira:adminPage:
+    - key: kup-admin-settings
+      title: KUP 50% Configuration
+      resource: admin-ui
+      resolver:
+        function: adminResolver
   function:
     - key: resolver
       handler: index.handler
+    - key: adminResolver
+      handler: index.adminHandler
 resources:
   - key: main
     path: static/hello-world/build
+  - key: admin-ui
+    path: static/admin-ui/build
 permissions:
+  scopes:
+    - storage:app
   content:
     styles:
       - unsafe-inline

@@ -10,3 +10,10 @@ resolver.define('getText', (req) => {
 
 export const handler = resolver.getDefinitions();
 
+const adminResolver = new Resolver();
+
+adminResolver.define('getAdminText', (req) => {
+  return 'Hello from Admin settings!';
+});
+
+export const adminHandler = adminResolver.getDefinitions();
