@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@forge/api": "^7.1.1",
+    "@forge/react": "^11.13.1",
     "@forge/resolver": "1.7.1"
   }
 }

@@ -23,6 +23,7 @@ modules:
     - key: kup-admin-settings
       title: KUP 50% Configuration
       resource: admin-ui
+      render: native
       resolver:
         function: adminResolver
   function:
@@ -34,7 +35,7 @@ resources:
   - key: main
     path: static/hello-world/build
   - key: admin-ui
-    path: static/admin-ui/build
+    path: src/admin-ui/index.jsx
 permissions:
   scopes:
     - storage:app
