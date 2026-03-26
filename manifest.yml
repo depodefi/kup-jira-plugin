@@ -38,6 +38,7 @@ resources:
 permissions:
   scopes:
     - storage:app
+    - read:jira-work
   content:
     styles:
       - unsafe-inline
