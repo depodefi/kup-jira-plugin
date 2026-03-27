@@ -26,16 +26,37 @@ modules:
       render: native
       resolver:
         function: adminResolver
+  jira:customField:
+    - key: kup-month-field
+      name: KUP Month
+      description: Month selected for KUP tracking
+      type: string
+      render: native
+      resource: custom-fields-ui
+      resolver:
+        function: fieldResolver
+    - key: kup-hours-field
+      name: KUP Hours
+      description: Hours for KUP tracking
+      type: number
+      render: native
+      resource: custom-fields-ui
+      resolver:
+        function: fieldResolver
   function:
     - key: resolver
       handler: index.handler
     - key: adminResolver
       handler: index.adminHandler
+    - key: fieldResolver
+      handler: index.fieldHandler
 resources:
   - key: main
     path: static/hello-world/build
   - key: admin-ui
     path: src/admin-ui/index.jsx
+  - key: custom-fields-ui
+    path: src/custom-fields-ui/index.jsx
 permissions:
   scopes:
     - storage:app

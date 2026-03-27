@@ -28,7 +28,7 @@ adminResolver.define('getJiraContext', async () => {
 // Get currently saved KUP configuration
 adminResolver.define('getKupConfig', async () => {
   const config = await storage.get('kup_config');
-  return config || { enabledProjects: [], enabledIssueTypes: [] };
+  return config || { enabledProjects: [], enabledIssueTypes: [], availableMonths: [] };
 });
 
 // Save KUP configuration

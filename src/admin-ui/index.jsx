@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, { 
-  Text, Select, Toggle, Button, Box, Stack, Heading, SectionMessage, Label 
+  Text, Select, Toggle, Button, Box, Stack, Heading, SectionMessage, Label, TextArea 
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
@@ -16,6 +16,7 @@ const AdminSettings = () => {
   const [enableAll, setEnableAll] = useState(true);
   const [enabledProjects, setEnabledProjects] = useState([]);
   const [projectIssueTypes, setProjectIssueTypes] = useState({});
+  const [availableMonthsText, setAvailableMonthsText] = useState('');
 
   useEffect(() => {
     async function loadData() {
@@ -32,6 +33,7 @@ const AdminSettings = () => {
           setEnableAll(config.enableAll !== false);
           setEnabledProjects(config.enabledProjects || []);
           setProjectIssueTypes(config.projectSpecificIssueTypes || {});
+          setAvailableMonthsText((config.availableMonths || []).join(', '));
         }
       } catch (err) {
         setErrorMSG('Failed to load configuration: ' + err.message);
@@ -47,10 +49,12 @@ const AdminSettings = () => {
     setSuccess(false);
     setErrorMSG(null);
     try {
+      const parsedMonths = availableMonthsText.split(',').map(m => m.trim()).filter(Boolean);
       await invoke('saveKupConfig', {
         enableAll,
         enabledProjects,
-        projectSpecificIssueTypes: projectIssueTypes
+        projectSpecificIssueTypes: projectIssueTypes,
+        availableMonths: parsedMonths
       });
       setSuccess(true);
     } catch (err) {
@@ -68,6 +72,12 @@ const AdminSettings = () => {
   return (
     <Box padding="space.300">
       <Heading size="medium">KUP 50% Configuration</Heading>
+      
+      <Box paddingBlock="space.200">
+        <SectionMessage title="Setup Instruction" appearance="discovery">
+          <Text>Please ensure that the **KUP Month** and **KUP Hours** custom fields are added to the Screens or Issue Layouts of your enabled projects. Jira hides them by default until an administrator explicitly places them.</Text>
+        </SectionMessage>
+      </Box>
       
       {success && (
         <Box paddingBlock="space.200">
@@ -137,6 +147,16 @@ const AdminSettings = () => {
             })}
           </Stack>
         )}
+
+        <Box paddingBlockStart="space.200">
+          <Label labelFor="available-months-textarea">Available Months for KUP Selection (comma separated)</Label>
+          <TextArea
+            id="available-months-textarea"
+            value={availableMonthsText}
+            onChange={(e) => setAvailableMonthsText(e.target.value)}
+            placeholder="e.g. Dec 2025, Jan 2026, Feb 2026"
+          />
+        </Box>
 
         <Box paddingBlockStart="space.300">
           <Button appearance="primary" onClick={handleSave}>
