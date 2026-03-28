@@ -62,7 +62,15 @@ panelResolver.define('getPanelData', async ({ context }) => {
 
   // Load the admin config to get the available months
   const config = await storage.get('kup_config');
-  const availableMonths = (config && config.availableMonths) ? config.availableMonths : [];
+  let availableMonths = config?.availableMonths;
+  
+  // If undefined (first install), default to 2026
+  if (availableMonths === undefined) {
+    availableMonths = [];
+    for (let m = 1; m <= 12; m++) {
+      availableMonths.push(`2026-${String(m).padStart(2, '0')}-KUP`);
+    }
+  }
 
   // Fetch the current KUP data stored as an Entity Property on this issue
   let kupData = null;
