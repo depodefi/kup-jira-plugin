@@ -153,11 +153,15 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
 
     if (accountId !== 'unknown') {
       try {
+        // Fetch using the App credentials (asApp) to bypass requiring individual users
+        // to click "Allow access" on Forge consent screens.
         const userRes = await api.asApp().requestJira(route`/rest/api/3/user?accountId=${accountId}`);
         if (userRes.ok) {
           const userObj = await userRes.json();
           userName = userObj.displayName || userName;
           userEmail = userObj.emailAddress || '';
+        } else {
+          console.warn('Jira API rejected user fetch via asApp:', userRes.status, await userRes.text());
         }
       } catch (e) {
         console.warn('Could not fetch user details', e);
