@@ -1,8 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, { 
-  Text, Select, Toggle, Button, Box, Stack, Heading, SectionMessage, Label, TextArea 
+  Text, Select, Toggle, Button, Box, Stack, Heading, SectionMessage, Label, Checkbox
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
+
+/**
+ * Generate all month strings from 2025-01-KUP to 2030-12-KUP.
+ * This is the master list — the admin picks which ones are active.
+ */
+const ALL_MONTHS = [];
+for (let year = 2025; year <= 2030; year++) {
+  for (let month = 1; month <= 12; month++) {
+    const mm = String(month).padStart(2, '0');
+    ALL_MONTHS.push(`${year}-${mm}-KUP`);
+  }
+}
 
 const AdminSettings = () => {
   const [loading, setLoading] = useState(true);
@@ -16,7 +28,9 @@ const AdminSettings = () => {
   const [enableAll, setEnableAll] = useState(true);
   const [enabledProjects, setEnabledProjects] = useState([]);
   const [projectIssueTypes, setProjectIssueTypes] = useState({});
-  const [availableMonthsText, setAvailableMonthsText] = useState('');
+
+  // Set of month strings that are checked (enabled for issue-level selection)
+  const [enabledMonths, setEnabledMonths] = useState(new Set());
 
   useEffect(() => {
     async function loadData() {
@@ -33,7 +47,8 @@ const AdminSettings = () => {
           setEnableAll(config.enableAll !== false);
           setEnabledProjects(config.enabledProjects || []);
           setProjectIssueTypes(config.projectSpecificIssueTypes || {});
-          setAvailableMonthsText((config.availableMonths || []).join(', '));
+          // Restore checked months from saved config
+          setEnabledMonths(new Set(config.availableMonths || []));
         }
       } catch (err) {
         setErrorMSG('Failed to load configuration: ' + err.message);
@@ -44,17 +59,29 @@ const AdminSettings = () => {
     loadData();
   }, []);
 
+  // Toggle a single month checkbox on/off
+  const toggleMonth = (month) => {
+    setEnabledMonths(prev => {
+      const next = new Set(prev);
+      if (next.has(month)) {
+        next.delete(month);
+      } else {
+        next.add(month);
+      }
+      return next;
+    });
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setSuccess(false);
     setErrorMSG(null);
     try {
-      const parsedMonths = availableMonthsText.split(',').map(m => m.trim()).filter(Boolean);
       await invoke('saveKupConfig', {
         enableAll,
         enabledProjects,
         projectSpecificIssueTypes: projectIssueTypes,
-        availableMonths: parsedMonths
+        availableMonths: Array.from(enabledMonths),
       });
       setSuccess(true);
     } catch (err) {
@@ -69,10 +96,17 @@ const AdminSettings = () => {
   // Convert enabledProjects to Select value format
   const selectedProjects = projectsData.filter(p => enabledProjects.includes(p.value));
 
+  // Group months by year for cleaner display
+  const monthsByYear = {};
+  ALL_MONTHS.forEach(m => {
+    const year = m.substring(0, 4);
+    if (!monthsByYear[year]) monthsByYear[year] = [];
+    monthsByYear[year].push(m);
+  });
+
   return (
     <Box padding="space.300">
       <Heading size="medium">KUP 50% Configuration</Heading>
-      
       
       {success && (
         <Box paddingBlock="space.200">
@@ -91,6 +125,7 @@ const AdminSettings = () => {
       )}
 
       <Stack space="space.400">
+        {/* Project & Issue Type Configuration */}
         <Box>
           <Toggle 
             id="enable-all-toggle" 
@@ -143,16 +178,30 @@ const AdminSettings = () => {
           </Stack>
         )}
 
+        {/* Available Months — predefined checkbox list grouped by year */}
         <Box paddingBlockStart="space.200">
-          <Label labelFor="available-months-textarea">Available Months for KUP Selection (comma separated)</Label>
-          <TextArea
-            id="available-months-textarea"
-            value={availableMonthsText}
-            onChange={(e) => setAvailableMonthsText(e.target.value)}
-            placeholder="e.g. Dec 2025, Jan 2026, Feb 2026"
-          />
+          <Heading size="small">Available KUP Months</Heading>
+          <Text>Check the months that should be available for selection on issues.</Text>
+          <Stack space="space.200">
+            {Object.entries(monthsByYear).map(([year, months]) => (
+              <Box key={year} paddingBlockStart="space.100">
+                <Heading size="xsmall">{year}</Heading>
+                <Stack space="space.050">
+                  {months.map(month => (
+                    <Checkbox
+                      key={month}
+                      label={month}
+                      isChecked={enabledMonths.has(month)}
+                      onChange={() => toggleMonth(month)}
+                    />
+                  ))}
+                </Stack>
+              </Box>
+            ))}
+          </Stack>
         </Box>
 
+        {/* Explicit save */}
         <Box paddingBlockStart="space.300">
           <Button appearance="primary" onClick={handleSave}>
             {saving ? 'Saving...' : 'Save Configuration'}
