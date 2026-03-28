@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
   Text, Select, Textfield, Button, Box, Stack, Heading, SectionMessage,
-  Label, Spinner, Strong, Em
+  Label, Spinner, Strong, Em, User
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
@@ -160,12 +160,13 @@ const KupPanel = () => {
                 );
                 return (
                   <Box key={idx} padding="space.100">
-                    <Text>
-                      <Em>{dateStr}</Em> — <Strong>{entry.userId}</Strong>
-                    </Text>
-                    {changeDescs.map((desc, i) => (
-                      <Text key={i}>  {desc}</Text>
-                    ))}
+                    <Stack space="space.050">
+                      <Text><Em>{dateStr}</Em></Text>
+                      <User accountId={entry.userId} />
+                      {changeDescs.map((desc, i) => (
+                        <Text key={i}>  • {desc}</Text>
+                      ))}
+                    </Stack>
                   </Box>
                 );
               })}
