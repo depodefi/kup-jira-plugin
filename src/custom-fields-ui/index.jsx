@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import ForgeReconciler, { CustomFieldEdit, CustomField, Text, Select, Textfield, useProductContext } from '@forge/react';
+import ForgeReconciler, { CustomFieldEdit, Text, Select, Textfield, useProductContext } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
 const App = () => {
@@ -16,11 +16,11 @@ const App = () => {
   }, [context]);
 
   if (!context || isEligible === null) {
-    return <CustomField><Text>Loading KUP config...</Text></CustomField>;
+    return <Text>Loading KUP config...</Text>;
   }
 
   if (isEligible === false) {
-    return <CustomField><Text>KUP not configured for this issue type.</Text></CustomField>;
+    return <Text>KUP not configured for this issue type.</Text>;
   }
 
   const { extension } = context;
@@ -64,9 +64,7 @@ const App = () => {
 
   // View Mode
   return (
-    <CustomField>
-      <Text>{fieldValue ? String(fieldValue) : 'Not set'}</Text>
-    </CustomField>
+    <Text>{fieldValue ? String(fieldValue) : 'Not set'}</Text>
   );
 };
 

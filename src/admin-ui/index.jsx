@@ -73,11 +73,6 @@ const AdminSettings = () => {
     <Box padding="space.300">
       <Heading size="medium">KUP 50% Configuration</Heading>
       
-      <Box paddingBlock="space.200">
-        <SectionMessage title="Setup Instruction" appearance="discovery">
-          <Text>Please ensure that the **KUP Month** and **KUP Hours** custom fields are added to the Screens or Issue Layouts of your enabled projects. Jira hides them by default until an administrator explicitly places them.</Text>
-        </SectionMessage>
-      </Box>
       
       {success && (
         <Box paddingBlock="space.200">

@@ -11,4 +11,4 @@ resolver.define('getText', (req) => {
 export const handler = resolver.getDefinitions();
 
 export { adminHandler } from './admin-resolvers';
-export { fieldHandler } from './field-resolvers';
+export { kupPanelHandler } from './panel-resolvers';
