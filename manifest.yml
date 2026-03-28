@@ -19,6 +19,13 @@ modules:
         function: resolver
       edit:
         resource: main
+  jira:globalPage:
+    - key: kup-report-page
+      title: My KUP Report
+      resource: kup-report-ui
+      render: native
+      resolver:
+        function: kupReportResolver
   jira:adminPage:
     - key: kup-admin-settings
       title: KUP 50% Configuration
@@ -26,6 +33,15 @@ modules:
       render: native
       resolver:
         function: adminResolver
+  jira:entityProperty:
+    - key: kup-data-indexing
+      entity: issue
+      propertyKey: kup-data
+      values:
+        - path: kupMonth
+          type: string
+        - path: kupHours
+          type: number
   jira:issueContext:
     - key: kup-compliance-panel
       title: KUP Compliance
@@ -41,6 +57,8 @@ modules:
       handler: index.adminHandler
     - key: kupPanelResolver
       handler: index.kupPanelHandler
+    - key: kupReportResolver
+      handler: index.kupReportHandler
 resources:
   - key: main
     path: static/hello-world/build
@@ -48,6 +66,8 @@ resources:
     path: src/admin-ui/index.jsx
   - key: kup-panel-ui
     path: src/kup-panel-ui/index.jsx
+  - key: kup-report-ui
+    path: src/kup-report-ui/index.jsx
 permissions:
   scopes:
     - storage:app
