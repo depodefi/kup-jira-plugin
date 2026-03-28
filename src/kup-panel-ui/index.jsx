@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
   Text, Select, Textfield, Button, Box, Stack, Heading, SectionMessage,
-  Label, Spinner, Strong, Em, User
+  Label, Spinner, Strong, Em
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
@@ -158,11 +158,15 @@ const KupPanel = () => {
                 const changeDescs = Object.entries(entry.changes).map(
                   ([field, diff]) => `${field}: ${diff.from || '—'} → ${diff.to || '—'}`
                 );
+                // Handle backwards compatibility for older entries that only had userId
+                const displayName = entry.userName || entry.userId;
+                const emailDisplay = entry.userEmail ? ` (${entry.userEmail})` : '';
+                const userDisplay = `${displayName}${emailDisplay}`;
+
                 return (
                   <Box key={idx} padding="space.100">
                     <Stack space="space.050">
-                      <Text><Em>{dateStr}</Em></Text>
-                      <User accountId={entry.userId} />
+                      <Text><Em>{dateStr}</Em> — <Strong>{userDisplay}</Strong></Text>
                       {changeDescs.map((desc, i) => (
                         <Text key={i}>  • {desc}</Text>
                       ))}

@@ -148,8 +148,26 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
 
     // 3. Build the audit entry using the authenticated user's account ID
     const accountId = context.accountId || 'unknown';
+    let userName = 'Unknown User';
+    let userEmail = '';
+
+    if (accountId !== 'unknown') {
+      try {
+        const userRes = await api.asApp().requestJira(route`/rest/api/3/user?accountId=${accountId}`);
+        if (userRes.ok) {
+          const userObj = await userRes.json();
+          userName = userObj.displayName || userName;
+          userEmail = userObj.emailAddress || '';
+        }
+      } catch (e) {
+        console.warn('Could not fetch user details', e);
+      }
+    }
+
     const auditEntry = {
       userId: accountId,
+      userName: userName,
+      userEmail: userEmail,
       timestamp: new Date().toISOString(),
       changes: {},
     };
