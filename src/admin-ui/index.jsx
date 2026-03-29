@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import ForgeReconciler, { 
-  Text, Select, Toggle, Button, Box, Stack, Heading, SectionMessage, Label, Checkbox
+import ForgeReconciler, {
+  Text, Select, Toggle, Button, Box, Stack, Inline, Heading, SectionMessage, Label, DynamicTable
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
@@ -96,14 +96,6 @@ const AdminSettings = () => {
   // Convert enabledProjects to Select value format
   const selectedProjects = projectsData.filter(p => enabledProjects.includes(p.value));
 
-  // Group months by year for cleaner display
-  const monthsByYear = {};
-  ALL_MONTHS.forEach(m => {
-    const year = m.substring(0, 4);
-    if (!monthsByYear[year]) monthsByYear[year] = [];
-    monthsByYear[year].push(m);
-  });
-
   return (
     <Box padding="space.300">
       <Heading size="medium">KUP 50% Configuration</Heading>
@@ -178,27 +170,42 @@ const AdminSettings = () => {
           </Stack>
         )}
 
-        {/* Available Months — predefined checkbox list grouped by year */}
+        {/* Available Months — DynamicTable with per-row toggles */}
         <Box paddingBlockStart="space.200">
           <Heading size="small">Available KUP Months</Heading>
-          <Text>Check the months that should be available for selection on issues.</Text>
-          <Stack space="space.200">
-            {Object.entries(monthsByYear).map(([year, months]) => (
-              <Box key={year} paddingBlockStart="space.100">
-                <Heading size="xsmall">{year}</Heading>
-                <Stack space="space.050">
-                  {months.map(month => (
-                    <Checkbox
-                      key={month}
-                      label={month}
-                      isChecked={enabledMonths.has(month)}
-                      onChange={() => toggleMonth(month)}
-                    />
-                  ))}
-                </Stack>
-              </Box>
-            ))}
-          </Stack>
+          <Text>Toggle the months that should be available for selection on issues.</Text>
+          <Box paddingBlock="space.150">
+            <Inline space="space.100">
+              <Button appearance="subtle" onClick={() => setEnabledMonths(new Set(ALL_MONTHS))}>Enable All</Button>
+              <Button appearance="subtle" onClick={() => setEnabledMonths(new Set())}>Disable All</Button>
+            </Inline>
+          </Box>
+          <DynamicTable
+            head={{
+              cells: [
+                { key: 'month', content: 'Month', isSortable: true },
+                { key: 'enabled', content: 'Enabled', width: 10 },
+              ]
+            }}
+            rows={ALL_MONTHS.map(month => ({
+              key: month,
+              cells: [
+                { key: 'month', content: month },
+                { key: 'enabled', content: (
+                  <Toggle
+                    id={`toggle-${month}`}
+                    isChecked={enabledMonths.has(month)}
+                    onChange={() => toggleMonth(month)}
+                  />
+                )},
+              ]
+            }))}
+            rowsPerPage={12}
+            defaultPage={(() => {
+              const firstIdx = ALL_MONTHS.findIndex(m => enabledMonths.has(m));
+              return firstIdx >= 0 ? Math.floor(firstIdx / 12) + 1 : 1;
+            })()}
+          />
         </Box>
 
         {/* Explicit save */}
