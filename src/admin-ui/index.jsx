@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
-  Text, Select, Toggle, Button, Box, Stack, Inline, Heading, SectionMessage, Label, DynamicTable
+  Text, Select, Toggle, Button, Box, Stack, Inline, Heading, SectionMessage, Label, DynamicTable, Textfield
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
@@ -31,6 +31,8 @@ const AdminSettings = () => {
 
   // Set of month strings that are checked (enabled for issue-level selection)
   const [enabledMonths, setEnabledMonths] = useState(new Set());
+  // Map of month string → max working hours number
+  const [monthWorkingHours, setMonthWorkingHours] = useState({});
 
   useEffect(() => {
     async function loadData() {
@@ -49,6 +51,7 @@ const AdminSettings = () => {
           setProjectIssueTypes(config.projectSpecificIssueTypes || {});
           // Restore checked months from saved config
           setEnabledMonths(new Set(config.availableMonths || []));
+          setMonthWorkingHours(config.monthWorkingHours || {});
         }
       } catch (err) {
         setErrorMSG('Failed to load configuration: ' + err.message);
@@ -82,6 +85,7 @@ const AdminSettings = () => {
         enabledProjects,
         projectSpecificIssueTypes: projectIssueTypes,
         availableMonths: Array.from(enabledMonths),
+        monthWorkingHours,
       });
       setSuccess(true);
     } catch (err) {
@@ -184,6 +188,7 @@ const AdminSettings = () => {
             head={{
               cells: [
                 { key: 'month', content: 'Month', isSortable: true },
+                { key: 'hours', content: 'Max Working Hours', width: 20 },
                 { key: 'enabled', content: 'Enabled', width: 10 },
               ]
             }}
@@ -191,6 +196,17 @@ const AdminSettings = () => {
               key: month,
               cells: [
                 { key: 'month', content: month },
+                { key: 'hours', content: (
+                  <Textfield
+                    id={`hours-${month}`}
+                    type="number"
+                    value={String(monthWorkingHours[month] ?? '')}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setMonthWorkingHours(prev => ({ ...prev, [month]: val === '' ? '' : Number(val) }));
+                    }}
+                  />
+                )},
                 { key: 'enabled', content: (
                   <Toggle
                     id={`toggle-${month}`}
