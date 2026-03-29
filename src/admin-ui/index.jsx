@@ -173,7 +173,7 @@ const AdminSettings = () => {
         {/* Available Months — DynamicTable with per-row toggles */}
         <Box paddingBlockStart="space.200">
           <Heading size="small">Available KUP Months</Heading>
-          <Text>Toggle the months that should be available for selection on issues.</Text>
+          <Text>Toggle the months that should be available for selection on issues. {enabledMonths.size} enabled, {ALL_MONTHS.length - enabledMonths.size} read only.</Text>
           <Box paddingBlock="space.150">
             <Inline space="space.100">
               <Button appearance="subtle" onClick={() => setEnabledMonths(new Set(ALL_MONTHS))}>Enable All</Button>
