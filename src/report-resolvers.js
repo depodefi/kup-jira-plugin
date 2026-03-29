@@ -1,6 +1,7 @@
 import Resolver from '@forge/resolver';
 import { storage } from '@forge/api';
 import api, { route } from '@forge/api';
+import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
 
 const kupReportResolver = new Resolver();
 
@@ -22,7 +23,7 @@ kupReportResolver.define('getAvailableMonths', async () => {
 kupReportResolver.define('getMyKupReport', async ({ payload, context }) => {
   const { month } = payload;
   if (!month) {
-    return { issues: [], totalHours: 0 };
+    return { issues: [], totalHours: 0, maxWorkingHours: null };
   }
 
   // JQL specifically filtering for the current user and the Entity Property match
@@ -63,9 +64,14 @@ kupReportResolver.define('getMyKupReport', async ({ payload, context }) => {
       };
     });
 
+    const config = await storage.get('kup_config');
+    const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
+    const maxWorkingHours = workingHoursMap[month] ?? null;
+
     return {
       issues: mappedIssues,
-      totalHours: totalHours
+      totalHours,
+      maxWorkingHours,
     };
   } catch (err) {
     console.warn("Exception during JQL fetch", err);

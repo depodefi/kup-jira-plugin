@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
-  Box, Stack, Heading, Select, DynamicTable, Spinner, Text, Strong, User, Link
+  Box, Stack, Inline, Heading, Select, DynamicTable, Spinner, Text, Strong, User, Link
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
@@ -10,7 +10,7 @@ const KupReportPage = () => {
   const [selectedMonth, setSelectedMonth] = useState(null);
   
   const [fetchingReport, setFetchingReport] = useState(false);
-  const [reportData, setReportData] = useState({ issues: [], totalHours: 0 });
+  const [reportData, setReportData] = useState({ issues: [], totalHours: 0, maxWorkingHours: null });
 
   useEffect(() => {
     async function init() {
@@ -105,10 +105,12 @@ const KupReportPage = () => {
               emptyView="You have zero KUP hours logged on assigned issues for this month."
             />
             
-            <Box paddingBlockStart="space.200">
-              <Heading size="medium">
-                Total Hours: <Strong>{reportData.totalHours}</Strong>
-              </Heading>
+            <Box paddingBlock="space.200" paddingInline="space.200">
+              <Inline space="space.600" alignBlock="center">
+                <Text>Total KUP hours: <Strong>{reportData.totalHours}</Strong></Text>
+                <Text>Max working hours: <Strong>{reportData.maxWorkingHours ?? '—'}</Strong></Text>
+                <Text>KUP %: <Strong>{reportData.maxWorkingHours > 0 ? `${Math.round((reportData.totalHours / reportData.maxWorkingHours) * 100)}%` : '—'}</Strong></Text>
+              </Inline>
             </Box>
           </Stack>
         )}
