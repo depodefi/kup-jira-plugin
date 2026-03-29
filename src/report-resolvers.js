@@ -9,7 +9,7 @@ kupReportResolver.define('getAvailableMonths', async () => {
   const config = await storage.get('kup_config');
   let availableMonths = config?.availableMonths;
   
-  if (availableMonths === undefined) {
+  if (!availableMonths || availableMonths.length === 0) {
     availableMonths = [];
     for (let m = 1; m <= 12; m++) {
       availableMonths.push(`2026-${String(m).padStart(2, '0')}-KUP`);
@@ -34,7 +34,11 @@ kupReportResolver.define('getMyKupReport', async ({ payload, context }) => {
   
   try {
     // Using asApp() to avoid forcing every user to click "Allow access" just for the search
-    const res = await api.asApp().requestJira(route`/rest/api/3/search?jql=${jql}&fields=summary,issuetype&properties=kup-data`);
+    const res = await api.asApp().requestJira(route`/rest/api/3/search/jql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jql, fields: ['summary', 'issuetype'], properties: ['kup-data'], maxResults: 100 }),
+    });
     
     if (!res.ok) {
       console.warn("Failed to fetch JQL search:", res.status, await res.text());
@@ -69,4 +73,4 @@ kupReportResolver.define('getMyKupReport', async ({ payload, context }) => {
   }
 });
 
-export default kupReportResolver;
+export const kupReportHandler = kupReportResolver.getDefinitions();

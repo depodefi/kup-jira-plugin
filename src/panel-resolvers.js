@@ -64,8 +64,8 @@ panelResolver.define('getPanelData', async ({ context }) => {
   const config = await storage.get('kup_config');
   let availableMonths = config?.availableMonths;
   
-  // If undefined (first install), default to 2026
-  if (availableMonths === undefined) {
+  // If undefined or empty (first install/never configured), default to 2026
+  if (!availableMonths || availableMonths.length === 0) {
     availableMonths = [];
     for (let m = 1; m <= 12; m++) {
       availableMonths.push(`2026-${String(m).padStart(2, '0')}-KUP`);

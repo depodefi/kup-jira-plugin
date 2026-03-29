@@ -12,4 +12,4 @@ export const handler = resolver.getDefinitions();
 
 export { adminHandler } from './admin-resolvers';
 export { kupPanelHandler } from './panel-resolvers';
-export { default as kupReportHandler } from './report-resolvers';
+export { kupReportHandler } from './report-resolvers';
