@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
-  Box, Stack, Heading, Select, DynamicTable, Spinner, Text, Strong, User
+  Box, Stack, Heading, Select, DynamicTable, Spinner, Text, Strong, User, Link
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
@@ -69,7 +69,7 @@ const KupReportPage = () => {
   const rows = reportData.issues.map((issue, index) => ({
     key: `row-${index}-${issue.key}`,
     cells: [
-      { key: `c-issue-${index}`, content: <Strong>{issue.key}</Strong> },
+      { key: `c-issue-${index}`, content: <Link href={`/browse/${issue.key}`} openNewTab={true}>{issue.key}</Link> },
       { key: `c-summary-${index}`, content: issue.summary },
       { key: `c-hours-${index}`, content: issue.hours }
     ]
