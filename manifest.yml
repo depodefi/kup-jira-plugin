@@ -1,24 +1,4 @@
 modules:
-  jira:dashboardGadget:
-    - key: compliance-overview-gadget
-      title: Compliance Overview
-      description: High-level compliance status across Jira projects.
-      thumbnail: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
-      resource: main
-      resolver:
-        function: resolver
-      edit:
-        resource: main
-
-    - key: compliance-details-gadget
-      title: Compliance Details
-      description: Detailed per-issue compliance breakdown and reporting.
-      thumbnail: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
-      resource: main
-      resolver:
-        function: resolver
-      edit:
-        resource: main
   jira:globalPage:
     - key: kup-report-page
       title: My KUP Report
@@ -51,8 +31,6 @@ modules:
       resolver:
         function: kupPanelResolver
   function:
-    - key: resolver
-      handler: index.handler
     - key: adminResolver
       handler: index.adminHandler
     - key: kupPanelResolver
@@ -60,8 +38,6 @@ modules:
     - key: kupReportResolver
       handler: index.kupReportHandler
 resources:
-  - key: main
-    path: static/hello-world/build
   - key: admin-ui
     path: src/admin-ui/index.jsx
   - key: kup-panel-ui
