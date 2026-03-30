@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ForgeReconciler, {
-  Text, Select, Toggle, Button, Box, Stack, Inline, Heading, SectionMessage, Label, DynamicTable, Textfield, UserPicker
+  Text, Select, Toggle, Button, Box, Stack, Inline, Heading, SectionMessage, Label, DynamicTable, Textfield, UserPicker, Lozenge
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
@@ -21,6 +21,8 @@ const AdminSettings = () => {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMSG, setErrorMSG] = useState(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const isLoaded = useRef(false);
 
   const [projectsData, setProjectsData] = useState([]);
   const [issueTypesData, setIssueTypesData] = useState([]);
@@ -66,10 +68,15 @@ const AdminSettings = () => {
         setErrorMSG('Failed to load configuration: ' + err.message);
       } finally {
         setLoading(false);
+        isLoaded.current = true;
       }
     }
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (isLoaded.current) setHasUnsavedChanges(true);
+  }, [enableAll, enabledProjects, projectIssueTypes, enabledMonths, monthWorkingHours, managerUsers, managerGroups]);
 
   // Toggle a single month checkbox on/off
   const toggleMonth = (month) => {
@@ -99,6 +106,7 @@ const AdminSettings = () => {
         managerGroups,
       });
       setSuccess(true);
+      setHasUnsavedChanges(false);
     } catch (err) {
       setErrorMSG('Failed to save configuration: ' + err.message);
     } finally {
@@ -113,6 +121,14 @@ const AdminSettings = () => {
 
   return (
     <Box padding="space.300">
+      {hasUnsavedChanges && (
+        <Box paddingBlockEnd="space.200">
+          <Inline space="space.100" alignBlock="center">
+            <Lozenge appearance="moved">Unsaved changes</Lozenge>
+            <Text>Save the configuration to apply your changes.</Text>
+          </Inline>
+        </Box>
+      )}
       <Heading size="small">Eligible Projects & Issue Types</Heading>
       
       {success && (
