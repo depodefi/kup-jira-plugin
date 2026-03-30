@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
-  Text, Select, Toggle, Button, Box, Stack, Inline, Heading, SectionMessage, Label, DynamicTable, Textfield
+  Text, Select, Toggle, Button, Box, Stack, Inline, Heading, SectionMessage, Label, DynamicTable, Textfield, UserPicker
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
@@ -34,16 +34,23 @@ const AdminSettings = () => {
   // Map of month string → max working hours number
   const [monthWorkingHours, setMonthWorkingHours] = useState({});
 
+  // Manager role config
+  const [managerUsers, setManagerUsers] = useState([]);   // array of accountId strings
+  const [managerGroups, setManagerGroups] = useState([]); // array of groupId strings
+  const [groupsData, setGroupsData] = useState([]);        // Select options
+
   useEffect(() => {
     async function loadData() {
       try {
-        const [context, config] = await Promise.all([
+        const [context, config, groups] = await Promise.all([
           invoke('getJiraContext'),
-          invoke('getKupConfig')
+          invoke('getKupConfig'),
+          invoke('getJiraGroups'),
         ]);
         
         setProjectsData(context.projects.map(p => ({ label: `${p.name} (${p.key})`, value: p.id })));
         setIssueTypesData(context.issueTypes.map(it => ({ label: it.name, value: it.id })));
+        setGroupsData((groups || []).map(g => ({ label: g.name, value: g.groupId })));
 
         if (config) {
           setEnableAll(config.enableAll !== false);
@@ -52,6 +59,8 @@ const AdminSettings = () => {
           // Restore checked months from saved config
           setEnabledMonths(new Set(config.availableMonths || []));
           setMonthWorkingHours(config.monthWorkingHours || {});
+          setManagerUsers(config.managerUsers || []);
+          setManagerGroups(config.managerGroups || []);
         }
       } catch (err) {
         setErrorMSG('Failed to load configuration: ' + err.message);
@@ -86,6 +95,8 @@ const AdminSettings = () => {
         projectSpecificIssueTypes: projectIssueTypes,
         availableMonths: Array.from(enabledMonths),
         monthWorkingHours,
+        managerUsers,
+        managerGroups,
       });
       setSuccess(true);
     } catch (err) {
@@ -173,6 +184,42 @@ const AdminSettings = () => {
             })}
           </Stack>
         )}
+
+        {/* Manager Role Configuration */}
+        <Box paddingBlockStart="space.200">
+          <Heading size="small">KUP Manager Roles</Heading>
+          <Text>Managers can view compliance reports for all users. Assign individual users or entire groups.</Text>
+          <Stack space="space.200">
+            <Box>
+              <Label labelFor="manager-users">Individual Manager Users</Label>
+              <UserPicker
+                name="manager-users"
+                label="Individual Manager Users"
+                isMulti={true}
+                defaultValue={managerUsers}
+                onChange={(value) => {
+                  if (!value) {
+                    setManagerUsers([]);
+                  } else if (Array.isArray(value)) {
+                    setManagerUsers(value.map(v => v.id));
+                  } else {
+                    setManagerUsers([value.id]);
+                  }
+                }}
+              />
+            </Box>
+            <Box>
+              <Label labelFor="manager-groups">Manager Groups</Label>
+              <Select
+                inputId="manager-groups"
+                isMulti={true}
+                options={groupsData}
+                value={groupsData.filter(g => managerGroups.includes(g.value))}
+                onChange={(values) => setManagerGroups(values ? values.map(v => v.value) : [])}
+              />
+            </Box>
+          </Stack>
+        </Box>
 
         {/* Available Months — DynamicTable with per-row toggles */}
         <Box paddingBlockStart="space.200">

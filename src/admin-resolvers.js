@@ -45,7 +45,13 @@ adminResolver.define('getKupConfig', async () => {
     await storage.set('kup_config', { ...(config || {}), monthWorkingHours });
   }
 
-  return { ...(config || { enabledProjects: [], enabledIssueTypes: [] }), availableMonths, monthWorkingHours };
+  return {
+    ...(config || { enabledProjects: [], enabledIssueTypes: [] }),
+    availableMonths,
+    monthWorkingHours,
+    managerUsers: config?.managerUsers || [],
+    managerGroups: config?.managerGroups || [],
+  };
 });
 
 // Save KUP configuration
@@ -55,6 +61,31 @@ adminResolver.define('saveKupConfig', async ({ payload }) => {
     return { success: true };
   }
   return { success: false, error: 'No payload provided' };
+});
+
+// Fetch available Jira groups for the Manager role picker
+adminResolver.define('getJiraGroups', async () => {
+  const res = await api.asApp().requestJira(route`/rest/api/3/groups/picker?query=&maxResults=50`);
+  const data = await res.json();
+  return (data.groups || []).map(g => ({ groupId: g.groupId, name: g.name }));
+});
+
+// Evaluate whether the current user holds the KUP Manager role
+adminResolver.define('getCurrentUserRole', async ({ context }) => {
+  const accountId = context.accountId;
+  const config = await storage.get('kup_config');
+  const managerUsers = config?.managerUsers || [];
+  const managerGroups = config?.managerGroups || [];
+
+  if (managerUsers.includes(accountId)) return { isManager: true };
+  if (managerGroups.length === 0) return { isManager: false };
+
+  const res = await api.asApp().requestJira(route`/rest/api/3/user/groups?accountId=${accountId}`);
+  if (!res.ok) return { isManager: false };
+
+  const userGroups = await res.json();
+  const userGroupIds = userGroups.map(g => g.groupId);
+  return { isManager: managerGroups.some(gid => userGroupIds.includes(gid)) };
 });
 
 export const adminHandler = adminResolver.getDefinitions();
