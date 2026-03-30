@@ -113,7 +113,7 @@ const AdminSettings = () => {
 
   return (
     <Box padding="space.300">
-      <Heading size="medium">KUP 50% Configuration</Heading>
+      <Heading size="small">Eligible Projects & Issue Types</Heading>
       
       {success && (
         <Box paddingBlock="space.200">
@@ -133,14 +133,19 @@ const AdminSettings = () => {
 
       <Stack space="space.400">
         {/* Project & Issue Type Configuration */}
-        <Box>
-          <Toggle 
-            id="enable-all-toggle" 
-            label="Enable KUP Tracking for ALL Projects & Issue Types (Setup Simplification)" 
-            isChecked={enableAll} 
-            onChange={(e) => setEnableAll(e.target.checked)} 
+        <Inline space="space.150" alignBlock="center">
+          <Toggle
+            id="enable-all-toggle"
+            label="Enable KUP tracking for all projects and issue types"
+            isChecked={enableAll}
+            onChange={(e) => setEnableAll(e.target.checked)}
           />
-        </Box>
+          <Text>
+            {enableAll
+              ? "KUP tracking is enabled for ALL projects & issue types"
+              : "KUP tracking is limited to selected projects & issue types"}
+          </Text>
+        </Inline>
 
         {!enableAll && (
           <Stack space="space.300">
@@ -191,7 +196,6 @@ const AdminSettings = () => {
           <Text>Managers can view compliance reports for all users. Assign individual users or entire groups.</Text>
           <Stack space="space.200">
             <Box>
-              <Label labelFor="manager-users">Individual Manager Users</Label>
               <UserPicker
                 name="manager-users"
                 label="Individual Manager Users"
