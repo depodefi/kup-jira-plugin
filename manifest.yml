@@ -22,6 +22,12 @@ modules:
           type: string
         - path: kupHours
           type: number
+    - key: kup-approval-indexing
+      entity: issue
+      propertyKey: kup-approval
+      values:
+        - path: status
+          type: string
   jira:issueContext:
     - key: kup-compliance-panel
       title: KUP Compliance

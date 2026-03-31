@@ -192,7 +192,40 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
       auditEntry.changes.kupHours = { from: oldData.kupHours, to: newData.kupHours };
     }
 
-    // 4. Append to the audit log Entity Property (max 50 entries to stay safe)
+    // 4. Handle kup-approval property
+    let approvalData = null;
+    try {
+      const approvalRes = await api.asApp().requestJira(
+        route`/rest/api/3/issue/${issueId}/properties/kup-approval`
+      );
+      if (approvalRes.ok) {
+        const body = await approvalRes.json();
+        approvalData = body.value || null;
+      }
+    } catch (err) {
+      // No existing approval, will create
+    }
+
+    let approvalStatusChanged = false;
+    if (!approvalData) {
+      // First save — initialize with pending status
+      approvalData = { status: 'pending', approvedBy: null, approvedByName: null, approvedAt: null };
+    } else if (approvalData.status === 'approved' && Object.keys(auditEntry.changes).length > 0) {
+      // Data edited after approval — reset back to pending
+      approvalData = { status: 'pending', approvedBy: null, approvedByName: null, approvedAt: null };
+      approvalStatusChanged = true;
+    }
+
+    await api.asApp().requestJira(
+      route`/rest/api/3/issue/${issueId}/properties/kup-approval`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(approvalData),
+      }
+    );
+
+    // 5. Append to the audit log Entity Property (max 50 entries to stay safe)
     let auditLog = [];
     try {
       const logRes = await api.asApp().requestJira(
@@ -206,14 +239,24 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
       // No existing log, start fresh
     }
 
-    // Only add entry if something actually changed
     if (Object.keys(auditEntry.changes).length > 0) {
       auditLog.push(auditEntry);
-      // Keep only the last 50 entries to prevent property size limits
-      if (auditLog.length > 50) {
-        auditLog = auditLog.slice(-50);
-      }
+    }
 
+    if (approvalStatusChanged) {
+      auditLog.push({
+        userId: accountId,
+        userName,
+        userEmail,
+        timestamp: new Date().toISOString(),
+        action: 'status_change',
+        changes: { status: { from: 'approved', to: 'pending' } },
+      });
+    }
+
+    if (auditLog.length > 50) auditLog = auditLog.slice(-50);
+
+    if (auditLog.length > 0) {
       await api.asApp().requestJira(
         route`/rest/api/3/issue/${issueId}/properties/kup-audit-log`,
         {
