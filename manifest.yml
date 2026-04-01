@@ -1,11 +1,12 @@
 modules:
   jira:globalPage:
     - key: kup-report-page
-      title: My KUP Report
-      resource: kup-report-ui
+      title: KUP Compliance
+      resource: kup-global-ui
       render: native
       resolver:
-        function: kupReportResolver
+        function: managerResolver
+      route: kup
   jira:adminPage:
     - key: kup-admin-settings
       title: KUP 50% Configuration
@@ -50,8 +51,8 @@ resources:
     path: src/admin-ui/index.jsx
   - key: kup-panel-ui
     path: src/kup-panel-ui/index.jsx
-  - key: kup-report-ui
-    path: src/kup-report-ui/index.jsx
+  - key: kup-global-ui
+    path: src/kup-global-ui/index.jsx
 permissions:
   scopes:
     - storage:app

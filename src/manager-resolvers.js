@@ -34,42 +34,49 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
   if (!isManager) return { error: 'Unauthorized' };
 
   const { month, statusFilter = 'all', groupId, teamFilter } = payload;
+  console.log('[getManagerReport] called with month:', month, 'statusFilter:', statusFilter, 'callerAccountId:', callerAccountId);
 
   // Build JQL
   let jql = `issue.property[kup-data].kupMonth = "${month}"`;
   if (statusFilter !== 'all') {
     jql += ` AND issue.property[kup-approval].status = "${statusFilter}"`;
   }
+  console.log('[getManagerReport] JQL:', jql);
 
-  // Paginate through all matching issues
+  // Paginate through all matching issues using cursor-based pagination
   const allIssues = [];
-  let startAt = 0;
+  let nextPageToken = undefined;
   const maxResults = 100;
 
   while (true) {
+    const requestBody = {
+      jql,
+      fields: ['summary', 'assignee'],
+      properties: ['kup-data', 'kup-approval'],
+      maxResults,
+    };
+    if (nextPageToken) requestBody.nextPageToken = nextPageToken;
+
     const res = await api.asApp().requestJira(route`/rest/api/3/search/jql`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jql,
-        fields: ['summary', 'assignee'],
-        properties: ['kup-data', 'kup-approval'],
-        startAt,
-        maxResults,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!res.ok) {
-      console.warn('Manager JQL search failed:', res.status, await res.text());
+      const errText = await res.text();
+      console.warn('[getManagerReport] JQL search failed:', res.status, errText);
       break;
     }
 
     const data = await res.json();
+    console.log('[getManagerReport] page got:', data.issues.length, 'nextPageToken:', data.nextPageToken ?? 'none');
     allIssues.push(...data.issues);
 
-    if (allIssues.length >= data.total || data.issues.length < maxResults) break;
-    startAt += maxResults;
+    if (!data.nextPageToken || data.issues.length < maxResults) break;
+    nextPageToken = data.nextPageToken;
   }
+  console.log('[getManagerReport] total issues fetched:', allIssues.length);
 
   // Group issues by assignee accountId
   const userMap = {};
@@ -144,6 +151,7 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
   const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
   const maxWorkingHours = workingHoursMap[month] ?? null;
 
+  console.log('[getManagerReport] returning', users.length, 'users, maxWorkingHours:', maxWorkingHours);
   return { month, maxWorkingHours, users };
 });
 
@@ -332,6 +340,82 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
   }
 
   return { success: true, unapprovedCount };
+});
+
+/**
+ * getMyKupReport: Returns KUP issues and hours for the current user + month.
+ * Used by the "My Report" tab of the global page.
+ */
+managerResolver.define('getMyKupReport', async ({ payload, context }) => {
+  const { month } = payload;
+  if (!month) return { issues: [], totalHours: 0, maxWorkingHours: null };
+
+  const accountId = context.accountId;
+  const jql = `assignee = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
+
+  try {
+    const res = await api.asApp().requestJira(route`/rest/api/3/search/jql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jql, fields: ['summary', 'issuetype'], properties: ['kup-data'], maxResults: 100 }),
+    });
+
+    if (!res.ok) return { issues: [], totalHours: 0 };
+
+    const data = await res.json();
+    let totalHours = 0;
+    const issues = data.issues.map(issue => {
+      const kupData = (issue.properties || {})['kup-data'] || {};
+      const hours = parseFloat(kupData.kupHours) || 0;
+      totalHours += hours;
+      return { key: issue.key, summary: issue.fields?.summary || '', hours };
+    });
+
+    const config = await storage.get('kup_config');
+    const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
+    const maxWorkingHours = workingHoursMap[month] ?? null;
+
+    return { issues, totalHours, maxWorkingHours };
+  } catch (err) {
+    console.warn('getMyKupReport error', err);
+    return { issues: [], totalHours: 0 };
+  }
+});
+
+/**
+ * getCurrentUserRole: Exposes manager role check to the manager UI.
+ * Mirrors the same resolver in admin-resolvers.js.
+ */
+managerResolver.define('getCurrentUserRole', async ({ context }) => {
+  const accountId = context.accountId;
+  const config = await storage.get('kup_config');
+  const managerUsers = config?.managerUsers || [];
+  const managerGroups = config?.managerGroups || [];
+
+  if (managerUsers.includes(accountId)) return { isManager: true };
+  if (managerGroups.length === 0) return { isManager: false };
+
+  const res = await api.asApp().requestJira(route`/rest/api/3/user/groups?accountId=${accountId}`);
+  if (!res.ok) return { isManager: false };
+
+  const userGroups = await res.json();
+  const userGroupIds = userGroups.map(g => g.groupId);
+  return { isManager: managerGroups.some(gid => userGroupIds.includes(gid)) };
+});
+
+/**
+ * getAvailableMonths: Returns the configured list of KUP months for the month picker.
+ */
+managerResolver.define('getAvailableMonths', async () => {
+  const config = await storage.get('kup_config');
+  let availableMonths = config?.availableMonths;
+  if (!availableMonths || availableMonths.length === 0) {
+    availableMonths = [];
+    for (let m = 1; m <= 12; m++) {
+      availableMonths.push(`2026-${String(m).padStart(2, '0')}-KUP`);
+    }
+  }
+  return availableMonths;
 });
 
 export const managerHandler = managerResolver.getDefinitions();
