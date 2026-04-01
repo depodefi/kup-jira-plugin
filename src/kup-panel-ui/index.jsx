@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
-  Text, Select, Textfield, Button, Box, Stack, Heading, SectionMessage,
-  Label, Spinner, Strong, Em
+  Text, Select, Textfield, Button, Box, Stack, Inline, Heading, SectionMessage,
+  Label, Spinner, Strong, Em, Lozenge
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
@@ -18,6 +18,7 @@ const KupPanel = () => {
   const [kupHours, setKupHours] = useState('');
   const [auditLog, setAuditLog] = useState([]);
   const [message, setMessage] = useState(null);
+  const [approval, setApproval] = useState(null);
 
   // Load panel data on mount
   useEffect(() => {
@@ -43,6 +44,7 @@ const KupPanel = () => {
       }
 
       setAuditLog(data.auditLog || []);
+      setApproval(data.approval || null);
       setLoading(false);
     }).catch((err) => {
       console.error('Failed to load panel data:', err);
@@ -95,10 +97,31 @@ const KupPanel = () => {
     );
   }
 
+  const isApproved = approval?.status === 'approved';
+
+  const approvedAtFormatted = approval?.approvedAt
+    ? new Date(approval.approvedAt).toLocaleDateString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      })
+    : null;
+
   // --- ELIGIBLE: FORM + AUDIT LOG ---
   return (
     <Box padding="space.200">
       <Stack space="space.200">
+        {/* Approval banner */}
+        {isApproved && (
+          <SectionMessage appearance="confirmation">
+            <Text>Approved by <Strong>{approval.approvedByName}</Strong> on {approvedAtFormatted}</Text>
+          </SectionMessage>
+        )}
+
+        {/* Pending lozenge */}
+        {!isApproved && approval?.status === 'pending' && (
+          <Inline><Lozenge appearance="inprogress">Pending approval</Lozenge></Inline>
+        )}
+
         {/* Save feedback */}
         {message && (
           <SectionMessage
@@ -118,6 +141,7 @@ const KupPanel = () => {
             onChange={(val) => setKupMonth(val)}
             placeholder="Select month (YYYY-MM-KUP)..."
             isClearable={true}
+            isDisabled={isApproved}
           />
         </Box>
 
@@ -130,19 +154,21 @@ const KupPanel = () => {
             value={kupHours}
             onChange={(e) => {
               const val = e.target.value;
-              // Only allow positive numbers
               if (val === '' || Number(val) >= 0) setKupHours(val);
             }}
             placeholder="e.g. 5"
+            isDisabled={isApproved}
           />
         </Box>
 
         {/* Explicit save button */}
-        <Box>
-          <Button appearance="primary" onClick={handleSave} isDisabled={saving}>
-            {saving ? 'Saving...' : 'Save KUP Data'}
-          </Button>
-        </Box>
+        {!isApproved && (
+          <Box>
+            <Button appearance="primary" onClick={handleSave} isDisabled={saving}>
+              {saving ? 'Saving...' : 'Save KUP Data'}
+            </Button>
+          </Box>
+        )}
 
         {/* Compliance Audit Trail */}
         {auditLog.length > 0 && (

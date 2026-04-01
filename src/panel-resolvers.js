@@ -101,11 +101,26 @@ panelResolver.define('getPanelData', async ({ context }) => {
     // No audit log yet, that's fine
   }
 
+  // Fetch the approval status
+  let approval = null;
+  try {
+    const approvalRes = await api.asApp().requestJira(
+      route`/rest/api/3/issue/${issueId}/properties/kup-approval`
+    );
+    if (approvalRes.ok) {
+      const body = await approvalRes.json();
+      approval = body.value || null;
+    }
+  } catch (err) {
+    // No approval property yet
+  }
+
   return {
     eligible: true,
     kupData,
     availableMonths,
     auditLog,
+    approval,
   };
 });
 
@@ -125,7 +140,22 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
   const { kupMonth, kupHours } = payload;
 
   try {
-    // 1. Read the current KUP data to calculate the diff for auditing
+    // 1. Guard: block edits on approved issues
+    try {
+      const approvalRes = await api.asApp().requestJira(
+        route`/rest/api/3/issue/${issueId}/properties/kup-approval`
+      );
+      if (approvalRes.ok) {
+        const body = await approvalRes.json();
+        if (body.value?.status === 'approved') {
+          return { success: false, error: 'Cannot edit KUP data — this issue has been approved. Contact your manager to unapprove first.' };
+        }
+      }
+    } catch (err) {
+      // No approval property — proceed normally
+    }
+
+    // 2. Read the current KUP data to calculate the diff for auditing
     let oldData = { kupMonth: null, kupHours: null };
     try {
       const existingRes = await api.asApp().requestJira(
@@ -139,7 +169,7 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
       // No existing data, default oldData is fine
     }
 
-    // 2. Save the new KUP data as an Issue Entity Property
+    // 3. Save the new KUP data as an Issue Entity Property
     const newData = { kupMonth, kupHours: Number(kupHours) || 0 };
     const saveRes = await api.asApp().requestJira(
       route`/rest/api/3/issue/${issueId}/properties/kup-data`,
@@ -154,7 +184,7 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
       return { success: false, error: `Failed to save KUP data: ${errText}` };
     }
 
-    // 3. Build the audit entry using the authenticated user's account ID
+    // 4. Build the audit entry using the authenticated user's account ID
     const accountId = context.accountId || 'unknown';
     let userName = 'Unknown User';
     let userEmail = '';
@@ -192,40 +222,22 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
       auditEntry.changes.kupHours = { from: oldData.kupHours, to: newData.kupHours };
     }
 
-    // 4. Handle kup-approval property
-    let approvalData = null;
-    try {
-      const approvalRes = await api.asApp().requestJira(
-        route`/rest/api/3/issue/${issueId}/properties/kup-approval`
-      );
-      if (approvalRes.ok) {
-        const body = await approvalRes.json();
-        approvalData = body.value || null;
-      }
-    } catch (err) {
-      // No existing approval, will create
-    }
-
-    let approvalStatusChanged = false;
-    if (!approvalData) {
-      // First save — initialize with pending status
-      approvalData = { status: 'pending', approvedBy: null, approvedByName: null, approvedAt: null };
-    } else if (approvalData.status === 'approved' && Object.keys(auditEntry.changes).length > 0) {
-      // Data edited after approval — reset back to pending
-      approvalData = { status: 'pending', approvedBy: null, approvedByName: null, approvedAt: null };
-      approvalStatusChanged = true;
-    }
-
-    await api.asApp().requestJira(
-      route`/rest/api/3/issue/${issueId}/properties/kup-approval`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(approvalData),
-      }
+    // 5. Initialize kup-approval on first save (status is guaranteed pending at this point)
+    const approvalInitRes = await api.asApp().requestJira(
+      route`/rest/api/3/issue/${issueId}/properties/kup-approval`
     );
+    if (!approvalInitRes.ok) {
+      await api.asApp().requestJira(
+        route`/rest/api/3/issue/${issueId}/properties/kup-approval`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'pending', approvedBy: null, approvedByName: null, approvedAt: null }),
+        }
+      );
+    }
 
-    // 5. Append to the audit log Entity Property (max 50 entries to stay safe)
+    // 6. Append to the audit log Entity Property (max 50 entries to stay safe)
     let auditLog = [];
     try {
       const logRes = await api.asApp().requestJira(
@@ -241,17 +253,6 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
 
     if (Object.keys(auditEntry.changes).length > 0) {
       auditLog.push(auditEntry);
-    }
-
-    if (approvalStatusChanged) {
-      auditLog.push({
-        userId: accountId,
-        userName,
-        userEmail,
-        timestamp: new Date().toISOString(),
-        action: 'status_change',
-        changes: { status: { from: 'approved', to: 'pending' } },
-      });
     }
 
     if (auditLog.length > 50) auditLog = auditLog.slice(-50);
