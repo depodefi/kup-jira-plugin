@@ -43,6 +43,8 @@ modules:
       handler: index.kupPanelHandler
     - key: kupReportResolver
       handler: index.kupReportHandler
+    - key: managerResolver
+      handler: index.managerHandler
 resources:
   - key: admin-ui
     path: src/admin-ui/index.jsx
