@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import ForgeReconciler, {
   Box, Stack, Inline, Heading, Select, DynamicTable, Spinner,
-  Text, Strong, Button, SectionMessage, Lozenge, Link, Label,
+  Text, Strong, Button, SectionMessage, Lozenge, Link, Label, UserPicker, User,
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
@@ -93,6 +93,8 @@ const MyReportView = ({ months }) => {
 // ---------------------------------------------------------------------------
 // Manager Approval view
 // ---------------------------------------------------------------------------
+const ALL_GROUPS_OPTION = { label: 'All users', value: null };
+
 const ManagerApprovalView = ({ months }) => {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [statusFilter, setStatusFilter] = useState(STATUS_FILTER_OPTIONS[0]);
@@ -102,11 +104,40 @@ const ManagerApprovalView = ({ months }) => {
   const [actionMessage, setActionMessage] = useState(null);
   const [actionLoading, setActionLoading] = useState({});
 
+  // Group filter
+  const [jiraGroups, setJiraGroups] = useState([]);
+  const [groupFilter, setGroupFilter] = useState(ALL_GROUPS_OPTION);
+
+  // My Team filter
+  const [myTeamActive, setMyTeamActive] = useState(false);
+  const [teamMembers, setTeamMembers] = useState([]); // array of accountId strings
+  const [showTeamEditor, setShowTeamEditor] = useState(false);
+  const [newMember, setNewMember] = useState(null);   // accountId from UserPicker
+  const [teamSaving, setTeamSaving] = useState(false);
+
+  // Default month and load groups + team on mount
   useEffect(() => {
     const d = new Date();
     const currentMonthString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-KUP`;
     const defaultOption = months.find(o => o.value === currentMonthString) || months[0];
     if (defaultOption) setSelectedMonth(defaultOption);
+
+    Promise.all([
+      invoke('getJiraGroups'),
+      invoke('getManagerTeam'),
+    ]).then(([groups, team]) => {
+      setJiraGroups([ALL_GROUPS_OPTION, ...groups.map(g => ({ label: g.name, value: g.groupId }))]);
+      // Normalize members — storage may contain raw UserPicker objects, plain strings,
+      // or our canonical { accountId, displayName } format from different versions.
+      const normalized = (team.members || []).map(m => {
+        if (typeof m === 'string') return { accountId: m, displayName: m };
+        return {
+          accountId: m.accountId || m.id || null,
+          displayName: m.displayName || m.name || m.accountId || m.id || 'Unknown',
+        };
+      });
+      setTeamMembers(normalized);
+    }).catch(err => console.error('Failed to load groups/team', err));
   }, [months]);
 
   const fetchReport = useCallback(async () => {
@@ -114,10 +145,14 @@ const ManagerApprovalView = ({ months }) => {
     setFetching(true);
     setActionMessage(null);
     try {
-      const data = await invoke('getManagerReport', {
+      const params = {
         month: selectedMonth.value,
         statusFilter: statusFilter.value,
-      });
+      };
+      if (groupFilter.value) params.groupId = groupFilter.value;
+      if (myTeamActive) params.teamFilter = true;
+
+      const data = await invoke('getManagerReport', params);
       setReportData(data.error ? null : data);
     } catch (err) {
       console.error('Failed to fetch manager report', err);
@@ -125,7 +160,7 @@ const ManagerApprovalView = ({ months }) => {
     } finally {
       setFetching(false);
     }
-  }, [selectedMonth, statusFilter]);
+  }, [selectedMonth, statusFilter, groupFilter, myTeamActive]);
 
   useEffect(() => {
     fetchReport();
@@ -173,6 +208,40 @@ const ManagerApprovalView = ({ months }) => {
       setActionMessage({ type: 'error', text: err.message || 'Unexpected error.' });
     } finally {
       setActionLoading(prev => ({ ...prev, [user.accountId]: false }));
+    }
+  };
+
+  const handleAddTeamMember = () => {
+    if (!newMember) return;
+    // Log the raw UserPicker value so we can inspect the object shape
+    console.log('[UserPicker] raw value:', JSON.stringify(newMember));
+    const accountId = typeof newMember === 'object'
+      ? (newMember.accountId || newMember.id || newMember.value)
+      : newMember;
+    const displayName = typeof newMember === 'object'
+      ? (newMember.name || newMember.displayName || accountId)
+      : newMember;
+    console.log('[UserPicker] resolved accountId:', accountId, 'displayName:', displayName);
+    if (teamMembers.some(m => m.accountId === accountId)) return;
+    setTeamMembers(prev => [...prev, { accountId, displayName }]);
+    setNewMember(null);
+  };
+
+  const handleRemoveTeamMember = (accountId) => {
+    setTeamMembers(prev => prev.filter(m => m.accountId !== accountId));
+  };
+
+  const handleSaveTeam = async () => {
+    setTeamSaving(true);
+    try {
+      await invoke('saveManagerTeam', { members: teamMembers });
+      setShowTeamEditor(false);
+      // If My Team filter is active, refresh the report with updated team
+      if (myTeamActive) await fetchReport();
+    } catch (err) {
+      console.error('Failed to save team', err);
+    } finally {
+      setTeamSaving(false);
     }
   };
 
@@ -252,14 +321,17 @@ const ManagerApprovalView = ({ months }) => {
     }
   }
 
-  let emptyView = 'No KUP hours logged for this month.';
-  if (statusFilter.value === 'pending' && users.length === 0 && reportData) {
+  const filtersActive = groupFilter.value || myTeamActive;
+  let emptyView = filtersActive
+    ? 'No users match your current filters for this month.'
+    : 'No KUP hours logged for this month.';
+  if (!filtersActive && statusFilter.value === 'pending' && users.length === 0 && reportData) {
     emptyView = 'All KUP hours for this month have been approved.';
   }
 
   return (
     <Stack space="space.300">
-      {/* Controls */}
+      {/* Main filter controls */}
       <Inline space="space.300" alignBlock="end">
         <Stack space="space.050">
           <Label labelFor="mgr-month-select">Month</Label>
@@ -281,15 +353,83 @@ const ManagerApprovalView = ({ months }) => {
             isClearable={false}
           />
         </Stack>
+        <Stack space="space.050">
+          <Label labelFor="mgr-group-filter">Jira Group</Label>
+          <Select
+            inputId="mgr-group-filter"
+            options={jiraGroups}
+            value={groupFilter}
+            onChange={setGroupFilter}
+            isClearable={false}
+          />
+        </Stack>
+        <Button
+          appearance={myTeamActive ? 'primary' : 'default'}
+          onClick={() => setMyTeamActive(a => !a)}
+        >
+          {myTeamActive ? 'My Team ✓' : 'My Team'}
+        </Button>
         <Button onClick={fetchReport} isDisabled={fetching}>Refresh</Button>
       </Inline>
 
+      {/* My Team editor toggle */}
+      <Inline space="space.200" alignBlock="center">
+        <Button appearance="subtle" onClick={() => setShowTeamEditor(e => !e)}>
+          {showTeamEditor ? 'Hide Team Editor' : 'Manage My Team'}
+        </Button>
+        {myTeamActive && teamMembers.length === 0 && (
+          <Text>Your team is empty — add members below to use this filter.</Text>
+        )}
+      </Inline>
+
+      {/* Team editor panel */}
+      {showTeamEditor && (
+        <Box padding="space.200">
+          <Stack space="space.200">
+            <Heading size="small">My Team</Heading>
+
+            {/* Add member */}
+            <Inline space="space.200" alignBlock="end">
+              <Stack space="space.050">
+                <Label labelFor="team-user-picker">Add member</Label>
+                <UserPicker
+                  name="team-user-picker"
+                  value={newMember}
+                  onChange={setNewMember}
+                />
+              </Stack>
+              <Button onClick={handleAddTeamMember} isDisabled={!newMember}>Add</Button>
+            </Inline>
+
+            {/* Current members list */}
+            {teamMembers.length === 0 ? (
+              <Text>No team members yet.</Text>
+            ) : (
+              <Stack space="space.100">
+                {teamMembers.map(member => (
+                  <Inline key={member.accountId} space="space.200" alignBlock="center">
+                    <Text><Strong>{member.displayName}</Strong></Text>
+                    <Button appearance="subtle" onClick={() => handleRemoveTeamMember(member.accountId)}>Remove</Button>
+                  </Inline>
+                ))}
+              </Stack>
+            )}
+
+            <Button appearance="primary" onClick={handleSaveTeam} isDisabled={teamSaving}>
+              {teamSaving ? 'Saving...' : 'Save Team'}
+            </Button>
+          </Stack>
+        </Box>
+      )}
+
+      {/* Action feedback */}
       {actionMessage && (
         <SectionMessage appearance={actionMessage.type}>
           <Text>{actionMessage.text}</Text>
         </SectionMessage>
       )}
 
+      {/* Report table */}
       {fetching ? (
         <Spinner size="medium" />
       ) : (

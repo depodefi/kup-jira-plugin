@@ -114,7 +114,7 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
   // Filter to Jira group members if groupId provided
   if (groupId) {
     const groupRes = await api.asApp().requestJira(
-      route`/rest/api/3/group/member?groupname=${groupId}`
+      route`/rest/api/3/group/member?groupId=${groupId}&maxResults=200`
     );
     if (groupRes.ok) {
       const groupData = await groupRes.json();
@@ -127,12 +127,15 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
 
   // Filter to manager's custom team if requested
   if (teamFilter) {
-    const config = await storage.get('kup_config');
-    const customTeam = config?.managerTeams?.[callerAccountId] || [];
-    if (customTeam.length > 0) {
-      const teamSet = new Set(customTeam);
+    const teamKey = `kup_manager_team_${callerAccountId}`;
+    const team = await storage.get(teamKey);
+    // Members may be stored as { accountId, displayName } objects or plain strings
+    const memberIds = new Set((team?.members || []).map(m =>
+      typeof m === 'object' ? m.accountId : m
+    ));
+    if (memberIds.size > 0) {
       for (const uid of Object.keys(userMap)) {
-        if (!teamSet.has(uid)) delete userMap[uid];
+        if (!memberIds.has(uid)) delete userMap[uid];
       }
     }
   }
@@ -416,6 +419,36 @@ managerResolver.define('getAvailableMonths', async () => {
     }
   }
   return availableMonths;
+});
+
+/**
+ * getJiraGroups: Returns all Jira groups for the group filter dropdown.
+ */
+managerResolver.define('getJiraGroups', async () => {
+  const res = await api.asApp().requestJira(route`/rest/api/3/groups/picker?query=&maxResults=50`);
+  const data = await res.json();
+  return (data.groups || []).map(g => ({ groupId: g.groupId, name: g.name }));
+});
+
+/**
+ * getManagerTeam: Returns the current manager's custom team from storage.
+ * Members are stored as an array of accountId strings.
+ */
+managerResolver.define('getManagerTeam', async ({ context }) => {
+  const accountId = context.accountId;
+  const team = await storage.get(`kup_manager_team_${accountId}`);
+  return { members: team?.members || [] };
+});
+
+/**
+ * saveManagerTeam: Saves the manager's custom team.
+ * Expects payload.members to be an array of accountId strings.
+ */
+managerResolver.define('saveManagerTeam', async ({ payload, context }) => {
+  const accountId = context.accountId;
+  const { members } = payload;
+  await storage.set(`kup_manager_team_${accountId}`, { members });
+  return { success: true };
 });
 
 export const managerHandler = managerResolver.getDefinitions();
