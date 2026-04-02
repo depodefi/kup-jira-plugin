@@ -446,9 +446,95 @@ const ManagerApprovalView = ({ months }) => {
 };
 
 // ---------------------------------------------------------------------------
+// Audit Log view
+// ---------------------------------------------------------------------------
+const AuditLogView = ({ months }) => {
+  const [selectedMonth, setSelectedMonth] = useState(null);
+  const [fetching, setFetching] = useState(false);
+  const [entries, setEntries] = useState([]);
+
+  useEffect(() => {
+    const d = new Date();
+    const currentMonthString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-KUP`;
+    const defaultOption = months.find(o => o.value === currentMonthString) || months[0];
+    if (defaultOption) setSelectedMonth(defaultOption);
+  }, [months]);
+
+  useEffect(() => {
+    if (!selectedMonth) return;
+    setFetching(true);
+    invoke('getApprovalAuditLog', { month: selectedMonth.value })
+      .then(data => setEntries(data.entries || []))
+      .catch(() => setEntries([]))
+      .finally(() => setFetching(false));
+  }, [selectedMonth]);
+
+  const head = {
+    cells: [
+      { key: 'timestamp', content: 'Date / Time', width: 18 },
+      { key: 'manager', content: 'Manager', width: 18 },
+      { key: 'action', content: 'Action', width: 10 },
+      { key: 'employee', content: 'Employee', width: 18 },
+      { key: 'issues', content: 'Issues', width: 36 },
+    ],
+  };
+
+  const rows = entries.map((entry, i) => {
+    const date = new Date(entry.timestamp);
+    const dateStr = `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const actionAppearance = entry.action === 'approval' ? 'success' : 'default';
+    const actionLabel = entry.action === 'approval' ? 'Approved' : 'Unapproved';
+
+    return {
+      key: `audit-${i}`,
+      cells: [
+        { key: 'timestamp', content: <Text>{dateStr}</Text> },
+        { key: 'manager', content: <Text>{entry.managerName}</Text> },
+        { key: 'action', content: <Lozenge appearance={actionAppearance}>{actionLabel}</Lozenge> },
+        { key: 'employee', content: <Text>{entry.targetUserName}</Text> },
+        {
+          key: 'issues',
+          content: (
+            <Text>
+              {entry.issueCount} issue{entry.issueCount !== 1 ? 's' : ''}{entry.issueKeys?.length ? `: ${entry.issueKeys.join(', ')}` : ''}
+            </Text>
+          ),
+        },
+      ],
+    };
+  });
+
+  return (
+    <Stack space="space.300">
+      <Box>
+        <Label labelFor="audit-month-select">Month</Label>
+        <Select
+          inputId="audit-month-select"
+          options={months}
+          value={selectedMonth}
+          onChange={setSelectedMonth}
+          isClearable={false}
+          isLoading={fetching}
+        />
+      </Box>
+
+      {fetching ? (
+        <Spinner size="medium" />
+      ) : (
+        <DynamicTable
+          head={head}
+          rows={rows}
+          emptyView="No approval actions recorded for this month."
+        />
+      )}
+    </Stack>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Root page — tab switcher for managers, report-only for others
 // ---------------------------------------------------------------------------
-const TABS = ['My Report', 'Manager Approval'];
+const TABS = ['My Report', 'Manager Approval', 'Audit Log'];
 
 const KupGlobalPage = () => {
   const [loading, setLoading] = useState(true);
@@ -499,6 +585,7 @@ const KupGlobalPage = () => {
         {/* Tab content */}
         {activeTab === 'My Report' && <MyReportView months={months} />}
         {activeTab === 'Manager Approval' && isManager && <ManagerApprovalView months={months} />}
+        {activeTab === 'Audit Log' && isManager && <AuditLogView months={months} />}
       </Stack>
     </Box>
   );

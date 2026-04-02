@@ -180,19 +180,21 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
     console.warn('Could not fetch manager display name', e);
   }
 
-  // Find all issues for the target user + month
+  // Find all issues for the target user + month (include assignee for display name)
   const jql = `assignee = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
   const res = await api.asApp().requestJira(route`/rest/api/3/search/jql`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jql, fields: ['summary'], properties: ['kup-approval'], maxResults: 100 }),
+    body: JSON.stringify({ jql, fields: ['summary', 'assignee'], properties: ['kup-approval'], maxResults: 100 }),
   });
 
   if (!res.ok) return { success: false, error: 'Failed to search issues' };
 
   const data = await res.json();
   let approvedCount = 0;
+  const approvedKeys = [];
   const now = new Date().toISOString();
+  const targetUserName = data.issues[0]?.fields?.assignee?.displayName || accountId;
 
   for (const issue of data.issues) {
     const props = issue.properties || {};
@@ -214,7 +216,7 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
       }
     );
 
-    // Append audit log entry
+    // Append per-issue audit log entry
     let auditLog = [];
     try {
       const logRes = await api.asApp().requestJira(
@@ -246,7 +248,27 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
       }
     );
 
+    approvedKeys.push(issue.key);
     approvedCount++;
+  }
+
+  // Append a summary entry to the centralized monthly approval log
+  if (approvedCount > 0) {
+    const logKey = `kup_approval_log_${month}`;
+    let centralLog = await storage.get(logKey) || [];
+    centralLog.push({
+      action: 'approval',
+      managerId: callerAccountId,
+      managerName: callerName,
+      targetUserId: accountId,
+      targetUserName,
+      month,
+      issueCount: approvedCount,
+      issueKeys: approvedKeys,
+      timestamp: now,
+    });
+    if (centralLog.length > 500) centralLog = centralLog.slice(-500);
+    await storage.set(logKey, centralLog);
   }
 
   return { success: true, approvedCount };
@@ -278,14 +300,16 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
   const res = await api.asApp().requestJira(route`/rest/api/3/search/jql`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jql, fields: ['summary'], properties: ['kup-approval'], maxResults: 100 }),
+    body: JSON.stringify({ jql, fields: ['summary', 'assignee'], properties: ['kup-approval'], maxResults: 100 }),
   });
 
   if (!res.ok) return { success: false, error: 'Failed to search issues' };
 
   const data = await res.json();
   let unapprovedCount = 0;
+  const unapprovedKeys = [];
   const now = new Date().toISOString();
+  const targetUserName = data.issues[0]?.fields?.assignee?.displayName || accountId;
 
   for (const issue of data.issues) {
     const props = issue.properties || {};
@@ -339,7 +363,27 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
       }
     );
 
+    unapprovedKeys.push(issue.key);
     unapprovedCount++;
+  }
+
+  // Append a summary entry to the centralized monthly approval log
+  if (unapprovedCount > 0) {
+    const logKey = `kup_approval_log_${month}`;
+    let centralLog = await storage.get(logKey) || [];
+    centralLog.push({
+      action: 'unapproval',
+      managerId: callerAccountId,
+      managerName: callerName,
+      targetUserId: accountId,
+      targetUserName,
+      month,
+      issueCount: unapprovedCount,
+      issueKeys: unapprovedKeys,
+      timestamp: now,
+    });
+    if (centralLog.length > 500) centralLog = centralLog.slice(-500);
+    await storage.set(logKey, centralLog);
   }
 
   return { success: true, unapprovedCount };
@@ -449,6 +493,24 @@ managerResolver.define('saveManagerTeam', async ({ payload, context }) => {
   const { members } = payload;
   await storage.set(`kup_manager_team_${accountId}`, { members });
   return { success: true };
+});
+
+/**
+ * getApprovalAuditLog: Returns the centralized approval/unapproval log for a given month.
+ * Only accessible to managers.
+ */
+managerResolver.define('getApprovalAuditLog', async ({ payload, context }) => {
+  const callerAccountId = context.accountId;
+  const isManager = await checkIsManager(callerAccountId);
+  if (!isManager) return { error: 'Unauthorized' };
+
+  const { month } = payload;
+  if (!month) return { entries: [] };
+
+  const logKey = `kup_approval_log_${month}`;
+  const log = await storage.get(logKey) || [];
+  // Return in reverse-chronological order
+  return { entries: [...log].reverse() };
 });
 
 export const managerHandler = managerResolver.getDefinitions();
