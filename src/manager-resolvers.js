@@ -167,7 +167,7 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
   const maxWorkingHours = workingHoursMap[month] ?? null;
 
   console.log('[getManagerReport] returning', users.length, 'users,', unassignedIssues.length, 'unassigned, maxWorkingHours:', maxWorkingHours);
-  return { month, maxWorkingHours, users, unassignedIssues };
+  return { month, maxWorkingHours, users, unassignedIssues, maxKupPercent: config?.maxKupPercent ?? null, kupLimitEnforcement: config?.kupLimitEnforcement ?? 'warn' };
 });
 
 /**
@@ -207,6 +207,28 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
   const approvedKeys = [];
   const now = new Date().toISOString();
   const targetUserName = data.issues[0]?.fields?.assignee?.displayName || accountId;
+
+  // KUP limit check
+  const kupConfig = await storage.get('kup_config');
+  const maxKupPercent = kupConfig?.maxKupPercent ?? null;
+  const kupLimitEnforcement = kupConfig?.kupLimitEnforcement ?? 'warn';
+  if (maxKupPercent) {
+    const totalHours = data.issues.reduce((sum, i) => sum + (parseFloat((i.properties?.['kup-data'] || {}).kupHours) || 0), 0);
+    const maxWorkingHours = (kupConfig?.monthWorkingHours || DEFAULT_WORKING_HOURS)[month] ?? 0;
+    const adjKey = `${accountId}_${month}`;
+    const adj = await adjustmentEntity.get(adjKey);
+    const adjustedBase = maxWorkingHours - (adj?.absenceHours ?? 0) + (adj?.overtimeHours ?? 0);
+    if (adjustedBase > 0) {
+      const kupPct = totalHours / adjustedBase * 100;
+      if (kupPct > maxKupPercent) {
+        if (kupLimitEnforcement === 'block') {
+          return { success: false, error: `Cannot approve — KUP is ${kupPct.toFixed(1)}%, which exceeds the company limit of ${maxKupPercent}%.` };
+        }
+        // warn mode: continue but flag it
+        var limitWarning = `Approved despite exceeding limit (${kupPct.toFixed(1)}% vs ${maxKupPercent}% cap).`;
+      }
+    }
+  }
 
   for (const issue of data.issues) {
     const props = issue.properties || {};
@@ -283,7 +305,7 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
     await storage.set(logKey, centralLog);
   }
 
-  return { success: true, approvedCount };
+  return { success: true, approvedCount, ...(limitWarning ? { warning: limitWarning } : {}) };
 });
 
 /**
@@ -437,7 +459,7 @@ managerResolver.define('getMyKupReport', async ({ payload, context }) => {
     const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
     const maxWorkingHours = workingHoursMap[month] ?? null;
 
-    return { issues, totalHours, maxWorkingHours, hasApprovedIssues };
+    return { issues, totalHours, maxWorkingHours, hasApprovedIssues, maxKupPercent: config?.maxKupPercent ?? null, kupLimitEnforcement: config?.kupLimitEnforcement ?? 'warn' };
   } catch (err) {
     console.warn('getMyKupReport error', err);
     return { issues: [], totalHours: 0 };

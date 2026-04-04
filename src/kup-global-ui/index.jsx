@@ -87,13 +87,18 @@ const MyReportView = ({ months }) => {
   const overtime = parseFloat(overtimeHours) || 0;
   const adjustedBase = (reportData.maxWorkingHours ?? 0) - absence + overtime;
   const hasAdjustment = absence !== 0 || overtime !== 0;
+  const effectiveBase = hasAdjustment ? adjustedBase : (reportData.maxWorkingHours ?? 0);
+  const kupPctNum = effectiveBase > 0 ? reportData.totalHours / effectiveBase * 100 : null;
   const kupPct = reportData.maxWorkingHours > 0
-    ? hasAdjustment
-      ? adjustedBase > 0
-        ? `${(reportData.totalHours / adjustedBase * 100).toFixed(1)}%`
-        : 'N/A'
-      : `${(reportData.totalHours / reportData.maxWorkingHours * 100).toFixed(1)}%`
+    ? kupPctNum !== null ? `${kupPctNum.toFixed(1)}%` : 'N/A'
     : '—';
+
+  // KUP limit warning for employee
+  const maxKupPercent = reportData.maxKupPercent;
+  const kupLimitEnforcement = reportData.kupLimitEnforcement;
+  const isOverLimit = maxKupPercent && kupPctNum !== null && kupPctNum > maxKupPercent;
+  const maxKupHours = maxKupPercent && effectiveBase > 0 ? effectiveBase * (maxKupPercent / 100) : null;
+  const remainingHours = maxKupHours !== null ? (maxKupHours - reportData.totalHours).toFixed(1) : null;
 
   const head = {
     cells: [
@@ -135,6 +140,17 @@ const MyReportView = ({ months }) => {
             rows={rows}
             emptyView="You have zero KUP hours logged on assigned issues for this month."
           />
+
+          {/* KUP limit warning */}
+          {isOverLimit && (
+            <SectionMessage appearance="warning">
+              <Text>
+                {kupLimitEnforcement === 'block'
+                  ? `Your KUP is ${kupPctNum.toFixed(1)}%, which exceeds the company limit of ${maxKupPercent}%. Your manager will not be able to approve your hours until this is resolved. You have ${remainingHours} KUP hours remaining.`
+                  : `Your KUP is ${kupPctNum.toFixed(1)}%, which exceeds the company limit of ${maxKupPercent}%. Your manager will see a warning when reviewing your hours.`}
+              </Text>
+            </SectionMessage>
+          )}
 
           {/* Hours adjustment */}
           <Box padding="space.200">
@@ -317,7 +333,10 @@ const ManagerApprovalView = ({ months }) => {
       const result = await invoke('bulkApprove', { accountId: user.accountId, month: selectedMonth.value });
       if (result.success) {
         const n = result.approvedCount;
-        setActionMessage({ type: 'confirmation', text: `Approved ${n} issue${n !== 1 ? 's' : ''} for ${user.displayName}.` });
+        const text = result.warning
+          ? `Approved ${n} issue${n !== 1 ? 's' : ''} for ${user.displayName}. ⚠ ${result.warning}`
+          : `Approved ${n} issue${n !== 1 ? 's' : ''} for ${user.displayName}.`;
+        setActionMessage({ type: result.warning ? 'warning' : 'confirmation', text });
         await fetchReport();
       } else {
         setActionMessage({ type: 'error', text: result.error || 'Approval failed.' });
@@ -406,17 +425,27 @@ const ManagerApprovalView = ({ months }) => {
     const overtimeH = adj?.overtimeHours ?? null;
     const maxH = reportData?.maxWorkingHours;
 
+    let kupPctNum = null;
     let kupPct = '—';
     if (maxH > 0) {
       if (adj) {
         const adjustedBase = maxH - (absenceH ?? 0) + (overtimeH ?? 0);
-        kupPct = adjustedBase > 0
-          ? `${(user.totalHours / adjustedBase * 100).toFixed(1)}%`
-          : 'N/A';
+        if (adjustedBase > 0) {
+          kupPctNum = user.totalHours / adjustedBase * 100;
+          kupPct = `${kupPctNum.toFixed(1)}%`;
+        } else {
+          kupPct = 'N/A';
+        }
       } else {
-        kupPct = fetchingAdjustments ? '…' : `${(user.totalHours / maxH * 100).toFixed(1)}%`;
+        kupPctNum = user.totalHours / maxH * 100;
+        kupPct = fetchingAdjustments ? '…' : `${kupPctNum.toFixed(1)}%`;
       }
     }
+
+    const mgrMaxKupPercent = reportData?.maxKupPercent;
+    const mgrEnforcement = reportData?.kupLimitEnforcement ?? 'warn';
+    const userOverLimit = mgrMaxKupPercent && kupPctNum !== null && kupPctNum > mgrMaxKupPercent;
+    const approveBlocked = userOverLimit && mgrEnforcement === 'block';
 
     const lozengeAppearance = user.status === 'approved' ? 'success'
       : user.status === 'mixed' ? 'moved' : 'default';
@@ -440,12 +469,22 @@ const ManagerApprovalView = ({ months }) => {
         { key: 'absence', content: <Text>{absenceH !== null ? absenceH : '—'}</Text> },
         { key: 'overtime', content: <Text>{overtimeH !== null ? overtimeH : '—'}</Text> },
         { key: 'kupPct', content: <Text>{kupPct}</Text> },
-        { key: 'status', content: <Lozenge appearance={lozengeAppearance}>{lozengeLabel}</Lozenge> },
+        {
+          key: 'status',
+          content: (
+            <Inline space="space.100">
+              <Lozenge appearance={lozengeAppearance}>{lozengeLabel}</Lozenge>
+              {userOverLimit && <Lozenge appearance="removed">Over limit</Lozenge>}
+            </Inline>
+          ),
+        },
         {
           key: 'action',
           content: user.status === 'approved'
             ? <Button appearance="subtle" onClick={() => handleUnapprove(user)} isDisabled={isActioning}>{isActioning ? '...' : 'Unapprove'}</Button>
-            : <Button appearance="primary" onClick={() => handleApprove(user)} isDisabled={isActioning}>{isActioning ? '...' : 'Approve'}</Button>,
+            : <Button appearance="primary" onClick={() => handleApprove(user)} isDisabled={isActioning || approveBlocked}>
+                {isActioning ? '...' : approveBlocked ? `Blocked (${kupPct})` : 'Approve'}
+              </Button>,
         },
       ],
     });

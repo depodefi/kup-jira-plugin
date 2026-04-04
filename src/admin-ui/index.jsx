@@ -41,6 +41,15 @@ const AdminSettings = () => {
   const [managerGroups, setManagerGroups] = useState([]); // array of groupId strings
   const [groupsData, setGroupsData] = useState([]);        // Select options
 
+  // KUP percentage limit
+  const [maxKupPercent, setMaxKupPercent] = useState('');
+  const [kupLimitEnforcement, setKupLimitEnforcement] = useState({ label: 'Warn only', value: 'warn' });
+
+  const ENFORCEMENT_OPTIONS = [
+    { label: 'Warn only', value: 'warn' },
+    { label: 'Block approval', value: 'block' },
+  ];
+
   useEffect(() => {
     async function loadData() {
       try {
@@ -63,6 +72,9 @@ const AdminSettings = () => {
           setMonthWorkingHours(config.monthWorkingHours || {});
           setManagerUsers(config.managerUsers || []);
           setManagerGroups(config.managerGroups || []);
+          setMaxKupPercent(config.maxKupPercent != null ? String(config.maxKupPercent) : '');
+          const enforcement = config.kupLimitEnforcement || 'warn';
+          setKupLimitEnforcement(ENFORCEMENT_OPTIONS.find(o => o.value === enforcement) || ENFORCEMENT_OPTIONS[0]);
         }
       } catch (err) {
         setErrorMSG('Failed to load configuration: ' + err.message);
@@ -76,7 +88,7 @@ const AdminSettings = () => {
 
   useEffect(() => {
     if (isLoaded.current) setHasUnsavedChanges(true);
-  }, [enableAll, enabledProjects, projectIssueTypes, enabledMonths, monthWorkingHours, managerUsers, managerGroups]);
+  }, [enableAll, enabledProjects, projectIssueTypes, enabledMonths, monthWorkingHours, managerUsers, managerGroups, maxKupPercent, kupLimitEnforcement]);
 
   // Toggle a single month checkbox on/off
   const toggleMonth = (month) => {
@@ -96,6 +108,7 @@ const AdminSettings = () => {
     setSuccess(false);
     setErrorMSG(null);
     try {
+      const parsedMax = parseFloat(maxKupPercent);
       await invoke('saveKupConfig', {
         enableAll,
         enabledProjects,
@@ -104,6 +117,8 @@ const AdminSettings = () => {
         monthWorkingHours,
         managerUsers,
         managerGroups,
+        maxKupPercent: !isNaN(parsedMax) && parsedMax > 0 ? parsedMax : null,
+        kupLimitEnforcement: kupLimitEnforcement.value,
       });
       setSuccess(true);
       setHasUnsavedChanges(false);
@@ -206,40 +221,71 @@ const AdminSettings = () => {
           </Stack>
         )}
 
-        {/* Manager Role Configuration */}
-        <Box paddingBlockStart="space.200">
-          <Heading size="small">KUP Manager Roles</Heading>
-          <Text>Managers can view compliance reports for all users. Assign individual users or entire groups.</Text>
-          <Stack space="space.200">
-            <Box>
-              <UserPicker
-                name="manager-users"
-                label="Individual Manager Users"
-                isMulti={true}
-                defaultValue={managerUsers}
-                onChange={(value) => {
-                  if (!value) {
-                    setManagerUsers([]);
-                  } else if (Array.isArray(value)) {
-                    setManagerUsers(value.map(v => v.id));
-                  } else {
-                    setManagerUsers([value.id]);
-                  }
-                }}
-              />
-            </Box>
-            <Box>
-              <Label labelFor="manager-groups">Manager Groups</Label>
-              <Select
-                inputId="manager-groups"
-                isMulti={true}
-                options={groupsData}
-                value={groupsData.filter(g => managerGroups.includes(g.value))}
-                onChange={(values) => setManagerGroups(values ? values.map(v => v.value) : [])}
-              />
-            </Box>
-          </Stack>
-        </Box>
+        {/* Manager Role Configuration + KUP Percentage Limit side by side */}
+        <Inline space="space.400" alignBlock="start">
+          <Box paddingBlockStart="space.200">
+            <Heading size="small">KUP Manager Roles</Heading>
+            <Text>Managers can view compliance reports for all users. Assign individual users or entire groups.</Text>
+            <Stack space="space.200">
+              <Box>
+                <UserPicker
+                  name="manager-users"
+                  label="Individual Manager Users"
+                  isMulti={true}
+                  defaultValue={managerUsers}
+                  onChange={(value) => {
+                    if (!value) {
+                      setManagerUsers([]);
+                    } else if (Array.isArray(value)) {
+                      setManagerUsers(value.map(v => v.id));
+                    } else {
+                      setManagerUsers([value.id]);
+                    }
+                  }}
+                />
+              </Box>
+              <Box>
+                <Label labelFor="manager-groups">Manager Groups</Label>
+                <Select
+                  inputId="manager-groups"
+                  isMulti={true}
+                  options={groupsData}
+                  value={groupsData.filter(g => managerGroups.includes(g.value))}
+                  onChange={(values) => setManagerGroups(values ? values.map(v => v.value) : [])}
+                />
+              </Box>
+            </Stack>
+          </Box>
+
+          <Box paddingBlockStart="space.200">
+            <Heading size="small">KUP Percentage Limit</Heading>
+            <Text>Set a company-wide cap on how much KUP an employee can claim. Leave empty or 0 to disable.</Text>
+            <Stack space="space.200">
+              <Stack space="space.050">
+                <Label labelFor="max-kup-percent">Maximum KUP % (0–100, leave empty to disable)</Label>
+                <Textfield
+                  id="max-kup-percent"
+                  name="max-kup-percent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={maxKupPercent}
+                  onChange={e => setMaxKupPercent(e.target.value)}
+                />
+              </Stack>
+              <Stack space="space.050">
+                <Label labelFor="enforcement-mode">Enforcement mode</Label>
+                <Select
+                  inputId="enforcement-mode"
+                  options={ENFORCEMENT_OPTIONS}
+                  value={kupLimitEnforcement}
+                  onChange={setKupLimitEnforcement}
+                  isClearable={false}
+                />
+              </Stack>
+            </Stack>
+          </Box>
+        </Inline>
 
         {/* Available Months — DynamicTable with per-row toggles */}
         <Box paddingBlockStart="space.200">

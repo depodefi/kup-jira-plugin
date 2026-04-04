@@ -51,6 +51,8 @@ adminResolver.define('getKupConfig', async () => {
     monthWorkingHours,
     managerUsers: config?.managerUsers || [],
     managerGroups: config?.managerGroups || [],
+    maxKupPercent: config?.maxKupPercent ?? null,
+    kupLimitEnforcement: config?.kupLimitEnforcement ?? 'warn',
   };
 });
 
