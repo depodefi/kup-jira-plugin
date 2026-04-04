@@ -769,7 +769,9 @@ const KupGlobalPage = () => {
           invoke('getCurrentUserRole'),
           invoke('getAvailableMonths'),
         ]);
-        setIsManager(roleResult.isManager === true);
+        const manager = roleResult.isManager === true;
+        setIsManager(manager);
+        if (manager) setActiveTab('Manager Approval');
         setMonths(availableMonths.map(m => ({ label: m, value: m })));
       } catch (err) {
         console.error('Failed to initialize KUP page', err);
