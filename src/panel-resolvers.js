@@ -4,45 +4,17 @@ import api, { route, storage } from '@forge/api';
 const panelResolver = new Resolver();
 
 /**
- * Helper: Check if the current issue's project and issue type
- * are enabled for KUP tracking in the global admin configuration.
- * Returns true if KUP tracking applies to this issue.
+ * Helper: Check eligibility using values already known from the resolver context.
+ * project.id and issue.typeId are provided by Forge for jira:issueContext —
+ * no Jira API call needed.
  */
-async function isKupEligible(issueId) {
-  if (!issueId) return false;
-
-  try {
-    // Fetch the issue's project and issue type from Jira
-    const res = await api.asApp().requestJira(
-      route`/rest/api/3/issue/${issueId}?fields=project,issuetype`
-    );
-    if (!res.ok) return false;
-
-    const issueData = await res.json();
-    const projectId = issueData.fields.project.id;
-    const issueTypeId = issueData.fields.issuetype.id;
-
-    // Load the global KUP configuration from Forge Storage
-    const config = await storage.get('kup_config');
-    if (!config) return false;
-
-    // If the master toggle is on, all projects/issue types are eligible
-    if (config.enableAll === true) return true;
-
-    // Check if this project is explicitly enabled
-    if (!config.enabledProjects || !config.enabledProjects.includes(projectId)) {
-      return false;
-    }
-
-    // Check project-specific issue types (empty array = all types allowed)
-    const projectIssueTypes = config.projectSpecificIssueTypes?.[projectId] || [];
-    if (projectIssueTypes.length === 0) return true;
-
-    return projectIssueTypes.includes(issueTypeId);
-  } catch (err) {
-    console.error('Error checking KUP eligibility:', err);
-    return false;
-  }
+function checkEligibility(config, projectId, issueTypeId) {
+  if (!config || !projectId) return false;
+  if (config.enableAll === true) return true;
+  if (!config.enabledProjects?.includes(projectId)) return false;
+  const projectIssueTypes = config.projectSpecificIssueTypes?.[projectId] || [];
+  if (projectIssueTypes.length === 0) return true;
+  return projectIssueTypes.includes(issueTypeId);
 }
 
 /**
@@ -52,19 +24,24 @@ async function isKupEligible(issueId) {
  */
 panelResolver.define('getPanelData', async ({ context }) => {
   const issueId = context.extension?.issue?.id;
-  const issueKey = context.extension?.issue?.key;
+  const projectId = context.extension?.project?.id;
+  const issueTypeId = context.extension?.issue?.typeId;
 
-  // Check if KUP tracking is enabled for this issue
-  const eligible = await isKupEligible(issueId);
-  if (!eligible) {
+  if (!issueId) return { eligible: false };
+
+  // Fetch config and issue properties all at once — no sequential dependency
+  const [config, kupDataRes, approvalRes] = await Promise.all([
+    storage.get('kup_config'),
+    api.asApp().requestJira(route`/rest/api/3/issue/${issueId}/properties/kup-data`).catch(() => null),
+    api.asApp().requestJira(route`/rest/api/3/issue/${issueId}/properties/kup-approval`).catch(() => null),
+  ]);
+
+  // Eligibility check uses context values — no extra API call required
+  if (!checkEligibility(config, projectId, issueTypeId)) {
     return { eligible: false };
   }
 
-  // Load the admin config to get the available months
-  const config = await storage.get('kup_config');
   let availableMonths = config?.availableMonths;
-  
-  // If undefined or empty (first install/never configured), default to 2026
   if (!availableMonths || availableMonths.length === 0) {
     availableMonths = [];
     for (let m = 1; m <= 12; m++) {
@@ -72,63 +49,36 @@ panelResolver.define('getPanelData', async ({ context }) => {
     }
   }
 
-  // Fetch the current KUP data stored as an Entity Property on this issue
-  let kupData = null;
-  try {
-    const dataRes = await api.asApp().requestJira(
-      route`/rest/api/3/issue/${issueId}/properties/kup-data`
-    );
-    if (dataRes.ok) {
-      const body = await dataRes.json();
-      kupData = body.value || null;
-    }
-  } catch (err) {
-    // Property does not exist yet, that's fine
-    console.log('No existing kup-data property for issue', issueKey);
-  }
+  const kupData = kupDataRes?.ok ? (await kupDataRes.json()).value || null : null;
+  const approval = approvalRes?.ok ? (await approvalRes.json()).value || null : null;
 
-  // Fetch the audit log stored as a separate Entity Property
-  let auditLog = [];
-  try {
-    const logRes = await api.asApp().requestJira(
-      route`/rest/api/3/issue/${issueId}/properties/kup-audit-log`
-    );
-    if (logRes.ok) {
-      const body = await logRes.json();
-      auditLog = body.value || [];
-    }
-  } catch (err) {
-    // No audit log yet, that's fine
-  }
-
-  // Fetch the approval status
-  let approval = null;
-  try {
-    const approvalRes = await api.asApp().requestJira(
-      route`/rest/api/3/issue/${issueId}/properties/kup-approval`
-    );
-    if (approvalRes.ok) {
-      const body = await approvalRes.json();
-      approval = body.value || null;
-    }
-  } catch (err) {
-    // No approval property yet
-  }
-
-  // Build the global page path: /jira/apps/{appId}/{environmentId}
-  // The app UUID is static; environmentId is installation-specific and comes from context.
   const APP_UUID = 'a8161fad-fc13-466f-aa28-6f264f00b396';
   const envId = context.environmentId;
   const globalPagePath = envId ? `/jira/apps/${APP_UUID}/${envId}` : null;
 
-  return {
-    eligible: true,
-    kupData,
-    availableMonths,
-    auditLog,
-    approval,
-    globalPagePath,
-  };
+  return { eligible: true, kupData, availableMonths, approval, globalPagePath };
+});
+
+/**
+ * getAuditLog: Fetched separately after the panel form renders,
+ * so the form is visible immediately without waiting for the log.
+ */
+panelResolver.define('getAuditLog', async ({ context }) => {
+  const issueId = context.extension?.issue?.id;
+  if (!issueId) return { auditLog: [] };
+
+  try {
+    const res = await api.asApp().requestJira(
+      route`/rest/api/3/issue/${issueId}/properties/kup-audit-log`
+    );
+    if (res.ok) {
+      const body = await res.json();
+      return { auditLog: body.value || [] };
+    }
+  } catch (err) {
+    // No audit log yet
+  }
+  return { auditLog: [] };
 });
 
 /**

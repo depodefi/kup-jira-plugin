@@ -8,6 +8,7 @@ import { invoke, router } from '@forge/bridge';
 /**
  * KUP Compliance Panel — renders inside the Jira Issue Context sidebar.
  * Shows KUP Month + Hours inputs for eligible issues, plus a full audit trail.
+ * Uses progressive loading: form renders first, audit log fetched separately.
  */
 const KupPanel = () => {
   const [loading, setLoading] = useState(true);
@@ -16,12 +17,12 @@ const KupPanel = () => {
   const [months, setMonths] = useState([]);
   const [kupMonth, setKupMonth] = useState(null);
   const [kupHours, setKupHours] = useState('');
-  const [auditLog, setAuditLog] = useState([]);
+  const [auditLog, setAuditLog] = useState(null); // null = not yet loaded
   const [message, setMessage] = useState(null);
   const [approval, setApproval] = useState(null);
   const [globalPagePath, setGlobalPagePath] = useState(null);
 
-  // Load panel data on mount
+  // Phase 1: load essential form data
   useEffect(() => {
     invoke('getPanelData').then((data) => {
       if (!data.eligible) {
@@ -31,11 +32,8 @@ const KupPanel = () => {
       }
 
       setEligible(true);
-
-      // Build month options from the admin-configured availableMonths list
       setMonths(data.availableMonths.map(m => ({ label: m, value: m })));
 
-      // Pre-fill with any previously saved values
       if (data.kupData) {
         setKupMonth(data.kupData.kupMonth
           ? { label: data.kupData.kupMonth, value: data.kupData.kupMonth }
@@ -44,7 +42,6 @@ const KupPanel = () => {
         setKupHours(data.kupData.kupHours != null ? String(data.kupData.kupHours) : '');
       }
 
-      setAuditLog(data.auditLog || []);
       setApproval(data.approval || null);
       setGlobalPagePath(data.globalPagePath || null);
       setLoading(false);
@@ -54,6 +51,16 @@ const KupPanel = () => {
       setLoading(false);
     });
   }, []);
+
+  // Phase 2: load audit log after form is visible
+  useEffect(() => {
+    if (!eligible) return;
+    invoke('getAuditLog').then((data) => {
+      setAuditLog(data.auditLog || []);
+    }).catch(() => {
+      setAuditLog([]);
+    });
+  }, [eligible]);
 
   // Handle explicit save action
   const handleSave = async () => {
@@ -69,7 +76,6 @@ const KupPanel = () => {
       const result = await invoke('saveKupData', payload);
       if (result.success) {
         setMessage({ type: 'success', text: 'KUP data saved successfully.' });
-        // Refresh the audit log from the response
         if (result.auditLog) setAuditLog(result.auditLog);
       } else {
         setMessage({ type: 'error', text: result.error || 'Failed to save.' });
@@ -81,11 +87,33 @@ const KupPanel = () => {
     }
   };
 
-  // --- LOADING STATE ---
+  // --- LOADING STATE: show form skeleton so layout is visible immediately ---
   if (loading) {
     return (
       <Box padding="space.200">
-        <Spinner size="medium" />
+        <Stack space="space.200">
+          <Box>
+            <Label labelFor="kup-month-select-loading">KUP Month</Label>
+            <Select
+              inputId="kup-month-select-loading"
+              options={[]}
+              placeholder="Loading..."
+              isDisabled={true}
+            />
+          </Box>
+          <Box>
+            <Label labelFor="kup-hours-input-loading">KUP Hours</Label>
+            <Textfield
+              id="kup-hours-input-loading"
+              type="number"
+              placeholder="Loading..."
+              isDisabled={true}
+            />
+          </Box>
+          <Box>
+            <Button appearance="primary" isDisabled={true}>Save KUP Data</Button>
+          </Box>
+        </Stack>
       </Box>
     );
   }
@@ -181,10 +209,14 @@ const KupPanel = () => {
           </Box>
         )}
 
-        {/* Compliance Audit Trail */}
-        {auditLog.length > 0 && (
-          <Box paddingBlockStart="space.300">
-            <Heading size="xsmall">Compliance Activity</Heading>
+        {/* Compliance Audit Trail — loads after form is visible */}
+        <Box paddingBlockStart="space.300">
+          <Heading size="xsmall">Compliance Activity</Heading>
+          {auditLog === null && <Spinner size="small" />}
+          {auditLog !== null && auditLog.length === 0 && (
+            <Text>No activity recorded yet.</Text>
+          )}
+          {auditLog !== null && auditLog.length > 0 && (
             <Stack space="space.100">
               {auditLog.slice().reverse().map((entry, idx) => {
                 const date = new Date(entry.timestamp);
@@ -195,7 +227,6 @@ const KupPanel = () => {
                 const changeDescs = Object.entries(entry.changes).map(
                   ([field, diff]) => `${field}: ${diff.from || '—'} → ${diff.to || '—'}`
                 );
-                // Handle backwards compatibility for older entries that only had userId
                 const displayName = entry.userName || entry.userId;
                 const emailDisplay = entry.userEmail ? ` (${entry.userEmail})` : '';
                 const userDisplay = `${displayName}${emailDisplay}`;
@@ -212,8 +243,8 @@ const KupPanel = () => {
                 );
               })}
             </Stack>
-          </Box>
-        )}
+          )}
+        </Box>
       </Stack>
     </Box>
   );
