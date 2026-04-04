@@ -3,7 +3,7 @@ import ForgeReconciler, {
   Text, Select, Textfield, Button, Box, Stack, Inline, Heading, SectionMessage,
   Label, Spinner, Strong, Em, Lozenge
 } from '@forge/react';
-import { invoke } from '@forge/bridge';
+import { invoke, router } from '@forge/bridge';
 
 /**
  * KUP Compliance Panel — renders inside the Jira Issue Context sidebar.
@@ -19,6 +19,7 @@ const KupPanel = () => {
   const [auditLog, setAuditLog] = useState([]);
   const [message, setMessage] = useState(null);
   const [approval, setApproval] = useState(null);
+  const [globalPagePath, setGlobalPagePath] = useState(null);
 
   // Load panel data on mount
   useEffect(() => {
@@ -45,6 +46,7 @@ const KupPanel = () => {
 
       setAuditLog(data.auditLog || []);
       setApproval(data.approval || null);
+      setGlobalPagePath(data.globalPagePath || null);
       setLoading(false);
     }).catch((err) => {
       console.error('Failed to load panel data:', err);
@@ -166,6 +168,15 @@ const KupPanel = () => {
           <Box>
             <Button appearance="primary" onClick={handleSave} isDisabled={saving}>
               {saving ? 'Saving...' : 'Save KUP Data'}
+            </Button>
+          </Box>
+        )}
+
+        {/* Link to KUP Compliance report */}
+        {globalPagePath && (
+          <Box>
+            <Button appearance="subtle" onClick={() => router.navigate(globalPagePath)}>
+              View KUP Compliance Report →
             </Button>
           </Box>
         )}

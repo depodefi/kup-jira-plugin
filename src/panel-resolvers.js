@@ -115,12 +115,19 @@ panelResolver.define('getPanelData', async ({ context }) => {
     // No approval property yet
   }
 
+  // Build the global page path: /jira/apps/{appId}/{environmentId}
+  // The app UUID is static; environmentId is installation-specific and comes from context.
+  const APP_UUID = 'a8161fad-fc13-466f-aa28-6f264f00b396';
+  const envId = context.environmentId;
+  const globalPagePath = envId ? `/jira/apps/${APP_UUID}/${envId}` : null;
+
   return {
     eligible: true,
     kupData,
     availableMonths,
     auditLog,
     approval,
+    globalPagePath,
   };
 });
 
