@@ -69,3 +69,23 @@ app:
     memoryMB: 256
     architecture: arm64
   id: ari:cloud:ecosystem::app/a8161fad-fc13-466f-aa28-6f264f00b396
+  storage:
+    entities:
+      - name: user-monthly-adjustment
+        attributes:
+          month:
+            type: string
+          accountId:
+            type: string
+          absenceHours:
+            type: float
+          overtimeHours:
+            type: float
+          updatedAt:
+            type: string
+          updatedBy:
+            type: string
+        indexes:
+          - name: by-month
+            range:
+              - month

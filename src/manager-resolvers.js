@@ -80,9 +80,18 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
 
   // Group issues by assignee accountId
   const userMap = {};
+  const unassignedIssues = [];
   for (const issue of allIssues) {
     const assignee = issue.fields?.assignee;
-    if (!assignee) continue;
+    if (!assignee) {
+      const kupData = (issue.properties || {})['kup-data'] || {};
+      unassignedIssues.push({
+        key: issue.key,
+        summary: issue.fields?.summary || '',
+        hours: parseFloat(kupData.kupHours) || 0,
+      });
+      continue;
+    }
 
     const uid = assignee.accountId;
     const props = issue.properties || {};
@@ -154,8 +163,8 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
   const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
   const maxWorkingHours = workingHoursMap[month] ?? null;
 
-  console.log('[getManagerReport] returning', users.length, 'users, maxWorkingHours:', maxWorkingHours);
-  return { month, maxWorkingHours, users };
+  console.log('[getManagerReport] returning', users.length, 'users,', unassignedIssues.length, 'unassigned, maxWorkingHours:', maxWorkingHours);
+  return { month, maxWorkingHours, users, unassignedIssues };
 });
 
 /**

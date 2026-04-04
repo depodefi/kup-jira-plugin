@@ -441,6 +441,31 @@ const ManagerApprovalView = ({ months }) => {
           <Strong>{users.length}</Strong> user{users.length !== 1 ? 's' : ''} · Max working hours this month: <Strong>{reportData.maxWorkingHours ?? '—'}</Strong>
         </Text>
       )}
+
+      {/* Unassigned issues */}
+      {!fetching && reportData?.unassignedIssues?.length > 0 && (
+        <Stack space="space.200">
+          <Heading size="small">Unassigned Issues ({reportData.unassignedIssues.length})</Heading>
+          <SectionMessage appearance="warning">
+            <Text>These issues have KUP hours logged but no assignee. Ping someone to claim them.</Text>
+          </SectionMessage>
+          <DynamicTable
+            head={{ cells: [
+              { key: 'key', content: 'Issue', width: 15 },
+              { key: 'summary', content: 'Summary', width: 60 },
+              { key: 'hours', content: 'KUP Hours', width: 15 },
+            ]}}
+            rows={reportData.unassignedIssues.map(issue => ({
+              key: issue.key,
+              cells: [
+                { key: 'key', content: <Link href={`/browse/${issue.key}`} openNewTab={true}>{issue.key}</Link> },
+                { key: 'summary', content: <Text>{issue.summary}</Text> },
+                { key: 'hours', content: <Text>{issue.hours}</Text> },
+              ],
+            }))}
+          />
+        </Stack>
+      )}
     </Stack>
   );
 };
