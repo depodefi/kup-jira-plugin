@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import ForgeReconciler, {
   Box, Stack, Inline, Heading, Select, DynamicTable, Spinner,
-  Text, Strong, Button, SectionMessage, Lozenge, Link, Label, UserPicker, User,
+  Text, Strong, Button, SectionMessage, Lozenge, Link, Label, UserPicker, User, Textfield,
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
@@ -19,6 +19,11 @@ const MyReportView = ({ months }) => {
   const [fetching, setFetching] = useState(false);
   const [reportData, setReportData] = useState({ issues: [], totalHours: 0, maxWorkingHours: null });
 
+  const [absenceHours, setAbsenceHours] = useState('0');
+  const [overtimeHours, setOvertimeHours] = useState('0');
+  const [adjustmentSaving, setAdjustmentSaving] = useState(false);
+  const [adjustmentMessage, setAdjustmentMessage] = useState(null); // { type, text }
+
   useEffect(() => {
     const d = new Date();
     const currentMonthString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-KUP`;
@@ -29,11 +34,64 @@ const MyReportView = ({ months }) => {
   useEffect(() => {
     if (!selectedMonth) return;
     setFetching(true);
-    invoke('getMyKupReport', { month: selectedMonth.value })
-      .then(setReportData)
-      .catch(() => setReportData({ issues: [], totalHours: 0 }))
-      .finally(() => setFetching(false));
+    setAdjustmentMessage(null);
+    Promise.all([
+      invoke('getMyKupReport', { month: selectedMonth.value }),
+      invoke('getMyAdjustment', { month: selectedMonth.value }),
+    ]).then(([report, adjustment]) => {
+      setReportData(report);
+      setAbsenceHours(String(adjustment.absenceHours ?? 0));
+      setOvertimeHours(String(adjustment.overtimeHours ?? 0));
+    }).catch(() => {
+      setReportData({ issues: [], totalHours: 0 });
+    }).finally(() => setFetching(false));
   }, [selectedMonth]);
+
+  const handleSaveAdjustment = async () => {
+    const absence = parseFloat(absenceHours) || 0;
+    const overtime = parseFloat(overtimeHours) || 0;
+
+    if (absence < 0 || overtime < 0) {
+      setAdjustmentMessage({ type: 'error', text: 'Hours cannot be negative.' });
+      return;
+    }
+    if (reportData.maxWorkingHours != null && absence > reportData.maxWorkingHours) {
+      setAdjustmentMessage({ type: 'warning', text: `Absence hours cannot exceed max working hours (${reportData.maxWorkingHours}).` });
+      return;
+    }
+
+    setAdjustmentSaving(true);
+    setAdjustmentMessage(null);
+    try {
+      const result = await invoke('saveMyAdjustment', {
+        month: selectedMonth.value,
+        absenceHours: absence,
+        overtimeHours: overtime,
+      });
+      if (result.success) {
+        setAdjustmentMessage({ type: 'confirmation', text: 'Adjustment saved.' });
+      } else {
+        setAdjustmentMessage({ type: 'error', text: result.error || 'Save failed.' });
+      }
+    } catch (err) {
+      setAdjustmentMessage({ type: 'error', text: err.message || 'Unexpected error.' });
+    } finally {
+      setAdjustmentSaving(false);
+    }
+  };
+
+  // Live-preview adjusted KUP %
+  const absence = parseFloat(absenceHours) || 0;
+  const overtime = parseFloat(overtimeHours) || 0;
+  const adjustedBase = (reportData.maxWorkingHours ?? 0) - absence + overtime;
+  const hasAdjustment = absence !== 0 || overtime !== 0;
+  const kupPct = reportData.maxWorkingHours > 0
+    ? hasAdjustment
+      ? adjustedBase > 0
+        ? `${(reportData.totalHours / adjustedBase * 100).toFixed(1)}%`
+        : 'N/A'
+      : `${(reportData.totalHours / reportData.maxWorkingHours * 100).toFixed(1)}%`
+    : '—';
 
   const head = {
     cells: [
@@ -69,20 +127,64 @@ const MyReportView = ({ months }) => {
       {fetching ? (
         <Spinner size="medium" />
       ) : (
-        <Stack space="space.200">
+        <Stack space="space.300">
           <DynamicTable
             head={head}
             rows={rows}
             emptyView="You have zero KUP hours logged on assigned issues for this month."
           />
+
+          {/* Hours adjustment */}
+          <Box padding="space.200">
+            <Stack space="space.200">
+              <Heading size="small">Hours Adjustment</Heading>
+              <Inline space="space.300" alignBlock="end">
+                <Stack space="space.050">
+                  <Label labelFor="absence-hours">Absence hours this month</Label>
+                  <Textfield
+                    id="absence-hours"
+                    name="absence-hours"
+                    value={absenceHours}
+                    onChange={e => setAbsenceHours(e.target.value)}
+                    type="number"
+                    min="0"
+                  />
+                </Stack>
+                <Stack space="space.050">
+                  <Label labelFor="overtime-hours">Overtime hours this month</Label>
+                  <Textfield
+                    id="overtime-hours"
+                    name="overtime-hours"
+                    value={overtimeHours}
+                    onChange={e => setOvertimeHours(e.target.value)}
+                    type="number"
+                    min="0"
+                  />
+                </Stack>
+                <Button appearance="primary" onClick={handleSaveAdjustment} isDisabled={adjustmentSaving}>
+                  {adjustmentSaving ? 'Saving...' : 'Save Adjustment'}
+                </Button>
+              </Inline>
+              {adjustmentMessage && (
+                <SectionMessage appearance={adjustmentMessage.type}>
+                  <Text>{adjustmentMessage.text}</Text>
+                </SectionMessage>
+              )}
+            </Stack>
+          </Box>
+
+          {/* Summary */}
           <Inline space="space.400" alignBlock="center">
             <Text>Total KUP hours: <Strong>{reportData.totalHours}</Strong></Text>
-            <Text>Max working hours: <Strong>{reportData.maxWorkingHours ?? '—'}</Strong></Text>
-            <Text>KUP %: <Strong>
-              {reportData.maxWorkingHours > 0
-                ? `${Math.round((reportData.totalHours / reportData.maxWorkingHours) * 100)}%`
-                : '—'}
-            </Strong></Text>
+            <Text>Max hours: <Strong>{reportData.maxWorkingHours ?? '—'}</Strong></Text>
+            {hasAdjustment && (
+              <>
+                <Text>Absence: <Strong>{absence}</Strong></Text>
+                <Text>Overtime: <Strong>{overtime}</Strong></Text>
+                <Text>Adjusted base: <Strong>{adjustedBase > 0 ? adjustedBase : 'N/A'}</Strong></Text>
+              </>
+            )}
+            <Text>KUP %: <Strong>{kupPct}</Strong></Text>
           </Inline>
         </Stack>
       )}

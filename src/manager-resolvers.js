@@ -1,6 +1,9 @@
 import Resolver from '@forge/resolver';
 import api, { route, storage } from '@forge/api';
+import kvs from '@forge/kvs';
 import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
+
+const adjustmentEntity = kvs.entity('user-monthly-adjustment');
 
 const managerResolver = new Resolver();
 
@@ -502,6 +505,93 @@ managerResolver.define('saveManagerTeam', async ({ payload, context }) => {
   const { members } = payload;
   await storage.set(`kup_manager_team_${accountId}`, { members });
   return { success: true };
+});
+
+/**
+ * getMyAdjustment: Returns absence/overtime adjustment for the current user + month.
+ */
+managerResolver.define('getMyAdjustment', async ({ payload, context }) => {
+  const { month } = payload;
+  if (!month) return { absenceHours: 0, overtimeHours: 0, updatedAt: null };
+
+  const key = `${context.accountId}_${month}`;
+  const record = await adjustmentEntity.get(key);
+  return {
+    absenceHours: record?.absenceHours ?? 0,
+    overtimeHours: record?.overtimeHours ?? 0,
+    updatedAt: record?.updatedAt ?? null,
+  };
+});
+
+/**
+ * saveMyAdjustment: Saves absence/overtime for the current user + month.
+ * Deletes the record if both values are 0 (store-only-when-non-zero rule).
+ */
+managerResolver.define('saveMyAdjustment', async ({ payload, context }) => {
+  const { month, absenceHours, overtimeHours } = payload;
+  const accountId = context.accountId;
+
+  if (typeof absenceHours !== 'number' || absenceHours < 0) {
+    return { success: false, error: 'Absence hours must be a non-negative number.' };
+  }
+  if (typeof overtimeHours !== 'number' || overtimeHours < 0) {
+    return { success: false, error: 'Overtime hours must be a non-negative number.' };
+  }
+
+  const config = await storage.get('kup_config');
+  const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
+  const maxWorkingHours = workingHoursMap[month];
+  if (maxWorkingHours != null && absenceHours > maxWorkingHours) {
+    return { success: false, error: `Absence hours cannot exceed max working hours (${maxWorkingHours}).` };
+  }
+
+  const key = `${accountId}_${month}`;
+
+  if (absenceHours === 0 && overtimeHours === 0) {
+    await adjustmentEntity.delete(key);
+    return { success: true, deleted: true };
+  }
+
+  await adjustmentEntity.set(key, {
+    accountId,
+    month,
+    absenceHours,
+    overtimeHours,
+    updatedAt: new Date().toISOString(),
+    updatedBy: accountId,
+  });
+  return { success: true };
+});
+
+/**
+ * getAdjustmentsForMonth: Returns all adjustments for a given month (manager-only).
+ * Returns a map keyed by accountId.
+ */
+managerResolver.define('getAdjustmentsForMonth', async ({ payload, context }) => {
+  const callerAccountId = context.accountId;
+  const isManager = await checkIsManager(callerAccountId);
+  if (!isManager) return { error: 'Unauthorized' };
+
+  const { month } = payload;
+  if (!month) return { adjustments: {} };
+
+  const adjustments = {};
+  let cursor;
+
+  do {
+    let q = adjustmentEntity.query().index('by-month', { partition: [month] }).limit(100);
+    if (cursor) q = q.cursor(cursor);
+    const result = await q.getMany();
+    for (const item of result.results) {
+      adjustments[item.value.accountId] = {
+        absenceHours: item.value.absenceHours,
+        overtimeHours: item.value.overtimeHours,
+      };
+    }
+    cursor = result.nextCursor;
+  } while (cursor);
+
+  return { adjustments };
 });
 
 /**
