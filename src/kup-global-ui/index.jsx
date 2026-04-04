@@ -206,6 +206,10 @@ const ManagerApprovalView = ({ months }) => {
   const [actionMessage, setActionMessage] = useState(null);
   const [actionLoading, setActionLoading] = useState({});
 
+  // Adjustments (second pass)
+  const [adjustmentsMap, setAdjustmentsMap] = useState({});
+  const [fetchingAdjustments, setFetchingAdjustments] = useState(false);
+
   // Group filter
   const [jiraGroups, setJiraGroups] = useState([]);
   const [groupFilter, setGroupFilter] = useState(ALL_GROUPS_OPTION);
@@ -242,6 +246,19 @@ const ManagerApprovalView = ({ months }) => {
     }).catch(err => console.error('Failed to load groups/team', err));
   }, [months]);
 
+  const fetchAdjustments = useCallback(async (month) => {
+    if (!month) return;
+    setFetchingAdjustments(true);
+    try {
+      const data = await invoke('getAdjustmentsForMonth', { month });
+      setAdjustmentsMap(data.adjustments || {});
+    } catch (err) {
+      console.error('Failed to fetch adjustments', err);
+    } finally {
+      setFetchingAdjustments(false);
+    }
+  }, []);
+
   const fetchReport = useCallback(async () => {
     if (!selectedMonth) return;
     setFetching(true);
@@ -264,9 +281,17 @@ const ManagerApprovalView = ({ months }) => {
     }
   }, [selectedMonth, statusFilter, groupFilter, myTeamActive]);
 
+  // First pass: fetch report on filter change
   useEffect(() => {
     fetchReport();
   }, [fetchReport]);
+
+  // Second pass: fetch adjustments when month changes (independent of filters)
+  useEffect(() => {
+    if (!selectedMonth) return;
+    setAdjustmentsMap({});
+    fetchAdjustments(selectedMonth.value);
+  }, [selectedMonth, fetchAdjustments]);
 
   const toggleExpand = (accountId) => {
     setExpandedRows(prev => {
@@ -349,13 +374,15 @@ const ManagerApprovalView = ({ months }) => {
 
   const head = {
     cells: [
-      { key: 'user', content: 'User', width: 20 },
-      { key: 'issues', content: 'Issues', width: 8 },
-      { key: 'totalHours', content: 'Total Hours', width: 10 },
-      { key: 'maxHours', content: 'Max Hours', width: 10 },
+      { key: 'user', content: 'User', width: 18 },
+      { key: 'issues', content: 'Issues', width: 6 },
+      { key: 'totalHours', content: 'KUP Hours', width: 9 },
+      { key: 'maxHours', content: 'Max Hours', width: 9 },
+      { key: 'absence', content: 'Absence', width: 8 },
+      { key: 'overtime', content: 'Overtime', width: 8 },
       { key: 'kupPct', content: 'KUP %', width: 8 },
-      { key: 'status', content: 'Status', width: 12 },
-      { key: 'action', content: 'Action', width: 12 },
+      { key: 'status', content: 'Status', width: 10 },
+      { key: 'action', content: 'Action', width: 10 },
     ],
   };
 
@@ -365,9 +392,23 @@ const ManagerApprovalView = ({ months }) => {
   for (const user of users) {
     const isExpanded = expandedRows.has(user.accountId);
     const isActioning = actionLoading[user.accountId];
-    const kupPct = reportData?.maxWorkingHours > 0
-      ? `${(user.totalHours / reportData.maxWorkingHours * 100).toFixed(1)}%`
-      : '—';
+    const adj = adjustmentsMap[user.accountId];
+    const absenceH = adj?.absenceHours ?? null;
+    const overtimeH = adj?.overtimeHours ?? null;
+    const maxH = reportData?.maxWorkingHours;
+
+    let kupPct = '—';
+    if (maxH > 0) {
+      if (adj) {
+        const adjustedBase = maxH - (absenceH ?? 0) + (overtimeH ?? 0);
+        kupPct = adjustedBase > 0
+          ? `${(user.totalHours / adjustedBase * 100).toFixed(1)}%`
+          : 'N/A';
+      } else {
+        kupPct = fetchingAdjustments ? '…' : `${(user.totalHours / maxH * 100).toFixed(1)}%`;
+      }
+    }
+
     const lozengeAppearance = user.status === 'approved' ? 'success'
       : user.status === 'mixed' ? 'moved' : 'default';
     const lozengeLabel = user.status === 'approved' ? 'Approved'
@@ -386,7 +427,9 @@ const ManagerApprovalView = ({ months }) => {
         },
         { key: 'issues', content: <Text>{user.issueCount}</Text> },
         { key: 'totalHours', content: <Text>{user.totalHours}</Text> },
-        { key: 'maxHours', content: <Text>{reportData?.maxWorkingHours ?? '—'}</Text> },
+        { key: 'maxHours', content: <Text>{maxH ?? '—'}</Text> },
+        { key: 'absence', content: <Text>{absenceH !== null ? absenceH : '—'}</Text> },
+        { key: 'overtime', content: <Text>{overtimeH !== null ? overtimeH : '—'}</Text> },
         { key: 'kupPct', content: <Text>{kupPct}</Text> },
         { key: 'status', content: <Lozenge appearance={lozengeAppearance}>{lozengeLabel}</Lozenge> },
         {
@@ -414,6 +457,8 @@ const ManagerApprovalView = ({ months }) => {
             { key: 'issues', content: <Text>{issue.summary}</Text> },
             { key: 'totalHours', content: <Text>{issue.hours}</Text> },
             { key: 'maxHours', content: <Text> </Text> },
+            { key: 'absence', content: <Text> </Text> },
+            { key: 'overtime', content: <Text> </Text> },
             { key: 'kupPct', content: <Text> </Text> },
             { key: 'status', content: <Lozenge appearance={issue.status === 'approved' ? 'success' : 'default'}>{issue.status === 'approved' ? 'Approved' : 'Pending'}</Lozenge> },
             { key: 'action', content: <Text> </Text> },

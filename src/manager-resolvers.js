@@ -1,6 +1,6 @@
 import Resolver from '@forge/resolver';
 import api, { route, storage } from '@forge/api';
-import kvs from '@forge/kvs';
+import kvs, { WhereConditions } from '@forge/kvs';
 import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
 
 const adjustmentEntity = kvs.entity('user-monthly-adjustment');
@@ -579,7 +579,7 @@ managerResolver.define('getAdjustmentsForMonth', async ({ payload, context }) =>
   let cursor;
 
   do {
-    let q = adjustmentEntity.query().index('by-month', { partition: [month] }).limit(100);
+    let q = adjustmentEntity.query().index('by-month').where(WhereConditions.equalTo(month)).limit(100);
     if (cursor) q = q.cursor(cursor);
     const result = await q.getMany();
     for (const item of result.results) {
