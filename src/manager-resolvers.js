@@ -416,25 +416,28 @@ managerResolver.define('getMyKupReport', async ({ payload, context }) => {
     const res = await api.asApp().requestJira(route`/rest/api/3/search/jql`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jql, fields: ['summary', 'issuetype'], properties: ['kup-data'], maxResults: 100 }),
+      body: JSON.stringify({ jql, fields: ['summary', 'issuetype'], properties: ['kup-data', 'kup-approval'], maxResults: 100 }),
     });
 
     if (!res.ok) return { issues: [], totalHours: 0 };
 
     const data = await res.json();
     let totalHours = 0;
+    let hasApprovedIssues = false;
     const issues = data.issues.map(issue => {
       const kupData = (issue.properties || {})['kup-data'] || {};
+      const approvalStatus = (issue.properties || {})['kup-approval']?.status || 'pending';
       const hours = parseFloat(kupData.kupHours) || 0;
       totalHours += hours;
-      return { key: issue.key, summary: issue.fields?.summary || '', hours };
+      if (approvalStatus === 'approved') hasApprovedIssues = true;
+      return { key: issue.key, summary: issue.fields?.summary || '', hours, approvalStatus };
     });
 
     const config = await storage.get('kup_config');
     const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
     const maxWorkingHours = workingHoursMap[month] ?? null;
 
-    return { issues, totalHours, maxWorkingHours };
+    return { issues, totalHours, maxWorkingHours, hasApprovedIssues };
   } catch (err) {
     console.warn('getMyKupReport error', err);
     return { issues: [], totalHours: 0 };
@@ -536,6 +539,27 @@ managerResolver.define('saveMyAdjustment', async ({ payload, context }) => {
   }
   if (typeof overtimeHours !== 'number' || overtimeHours < 0) {
     return { success: false, error: 'Overtime hours must be a non-negative number.' };
+  }
+
+  // Check if any issue for this user/month is approved — lock adjustments if so
+  const lockCheckRes = await api.asApp().requestJira(route`/rest/api/3/search/jql`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jql: `assignee = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`,
+      fields: [],
+      properties: ['kup-approval'],
+      maxResults: 100,
+    }),
+  });
+  if (lockCheckRes.ok) {
+    const lockData = await lockCheckRes.json();
+    const anyApproved = lockData.issues.some(
+      i => (i.properties?.['kup-approval']?.status) === 'approved'
+    );
+    if (anyApproved) {
+      return { success: false, locked: true, error: 'Cannot modify adjustments — your hours for this month have been approved. Contact your manager to unapprove first.' };
+    }
   }
 
   const config = await storage.get('kup_config');

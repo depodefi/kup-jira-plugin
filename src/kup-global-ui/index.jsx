@@ -80,6 +80,8 @@ const MyReportView = ({ months }) => {
     }
   };
 
+  const isLocked = reportData.hasApprovedIssues === true;
+
   // Live-preview adjusted KUP %
   const absence = parseFloat(absenceHours) || 0;
   const overtime = parseFloat(overtimeHours) || 0;
@@ -138,6 +140,11 @@ const MyReportView = ({ months }) => {
           <Box padding="space.200">
             <Stack space="space.200">
               <Heading size="small">Hours Adjustment</Heading>
+              {isLocked && (
+                <SectionMessage appearance="information">
+                  <Text>Adjustments are locked — your hours for this month have been approved. Contact your manager to unapprove first.</Text>
+                </SectionMessage>
+              )}
               <Inline space="space.300" alignBlock="end">
                 <Stack space="space.050">
                   <Label labelFor="absence-hours">Absence hours this month</Label>
@@ -145,9 +152,10 @@ const MyReportView = ({ months }) => {
                     id="absence-hours"
                     name="absence-hours"
                     value={absenceHours}
-                    onChange={e => setAbsenceHours(e.target.value)}
+                    onChange={e => !isLocked && setAbsenceHours(e.target.value)}
                     type="number"
                     min="0"
+                    isDisabled={isLocked}
                   />
                 </Stack>
                 <Stack space="space.050">
@@ -156,12 +164,13 @@ const MyReportView = ({ months }) => {
                     id="overtime-hours"
                     name="overtime-hours"
                     value={overtimeHours}
-                    onChange={e => setOvertimeHours(e.target.value)}
+                    onChange={e => !isLocked && setOvertimeHours(e.target.value)}
                     type="number"
                     min="0"
+                    isDisabled={isLocked}
                   />
                 </Stack>
-                <Button appearance="primary" onClick={handleSaveAdjustment} isDisabled={adjustmentSaving}>
+                <Button appearance="primary" onClick={handleSaveAdjustment} isDisabled={adjustmentSaving || isLocked}>
                   {adjustmentSaving ? 'Saving...' : 'Save Adjustment'}
                 </Button>
               </Inline>
