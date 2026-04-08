@@ -5,6 +5,9 @@ import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
 
 const adjustmentEntity = kvs.entity('user-monthly-adjustment');
 
+const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
+const VALID_STATUS_FILTERS = ['all', 'pending', 'approved'];
+
 const managerResolver = new Resolver();
 
 /**
@@ -20,7 +23,7 @@ async function checkIsManager(accountId) {
   if (managerGroups.length === 0) return false;
 
   const res = await api.asApp().requestJira(route`/rest/api/3/user/groups?accountId=${accountId}`);
-  if (!res.ok) return false;
+  if (!res.ok) throw new Error(`Manager role check failed: unable to verify group membership (${res.status})`);
 
   const userGroups = await res.json();
   const userGroupIds = userGroups.map(g => g.groupId);
@@ -37,14 +40,15 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
   if (!isManager) return { error: 'Unauthorized' };
 
   const { month, statusFilter = 'all', groupId, teamFilter } = payload;
-  console.log('[getManagerReport] called with month:', month, 'statusFilter:', statusFilter, 'callerAccountId:', callerAccountId);
+
+  if (!month || !MONTH_REGEX.test(month)) return { error: 'Invalid month format' };
+  if (!VALID_STATUS_FILTERS.includes(statusFilter)) return { error: 'Invalid status filter' };
 
   // Build JQL
   let jql = `issue.property[kup-data].kupMonth = "${month}"`;
   if (statusFilter !== 'all') {
     jql += ` AND issue.property[kup-approval].status = "${statusFilter}"`;
   }
-  console.log('[getManagerReport] JQL:', jql);
 
   // Paginate through all matching issues using cursor-based pagination
   const allIssues = [];
@@ -73,14 +77,11 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
     }
 
     const data = await res.json();
-    console.log('[getManagerReport] page got:', data.issues.length, 'nextPageToken:', data.nextPageToken ?? 'none');
     allIssues.push(...data.issues);
 
     if (!data.nextPageToken || data.issues.length < maxResults) break;
     nextPageToken = data.nextPageToken;
   }
-  console.log('[getManagerReport] total issues fetched:', allIssues.length);
-
   // Group issues by assignee accountId
   const userMap = {};
   const unassignedIssues = [];
@@ -166,7 +167,6 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
   const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
   const maxWorkingHours = workingHoursMap[month] ?? null;
 
-  console.log('[getManagerReport] returning', users.length, 'users,', unassignedIssues.length, 'unassigned, maxWorkingHours:', maxWorkingHours);
   return { month, maxWorkingHours, users, unassignedIssues, maxKupPercent: config?.maxKupPercent ?? null, kupLimitEnforcement: config?.kupLimitEnforcement ?? 'warn' };
 });
 
@@ -179,6 +179,8 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
   if (!isManager) return { error: 'Unauthorized' };
 
   const { accountId, month } = payload;
+
+  if (!month || !MONTH_REGEX.test(month)) return { success: false, error: 'Invalid month format' };
 
   // Fetch manager's display name for audit entries
   let callerName = 'Unknown Manager';
@@ -318,6 +320,8 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
 
   const { accountId, month } = payload;
 
+  if (!month || !MONTH_REGEX.test(month)) return { success: false, error: 'Invalid month format' };
+
   // Fetch manager's display name for audit entries
   let callerName = 'Unknown Manager';
   try {
@@ -430,6 +434,7 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
 managerResolver.define('getMyKupReport', async ({ payload, context }) => {
   const { month } = payload;
   if (!month) return { issues: [], totalHours: 0, maxWorkingHours: null };
+  if (!MONTH_REGEX.test(month)) return { issues: [], totalHours: 0, maxWorkingHours: null };
 
   const accountId = context.accountId;
   const jql = `assignee = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
@@ -556,11 +561,12 @@ managerResolver.define('saveMyAdjustment', async ({ payload, context }) => {
   const { month, absenceHours, overtimeHours } = payload;
   const accountId = context.accountId;
 
-  if (typeof absenceHours !== 'number' || absenceHours < 0) {
-    return { success: false, error: 'Absence hours must be a non-negative number.' };
+  if (!month || !MONTH_REGEX.test(month)) return { success: false, error: 'Invalid month format' };
+  if (typeof absenceHours !== 'number' || absenceHours < 0 || absenceHours > 744) {
+    return { success: false, error: 'Absence hours must be a number between 0 and 744.' };
   }
-  if (typeof overtimeHours !== 'number' || overtimeHours < 0) {
-    return { success: false, error: 'Overtime hours must be a non-negative number.' };
+  if (typeof overtimeHours !== 'number' || overtimeHours < 0 || overtimeHours > 744) {
+    return { success: false, error: 'Overtime hours must be a number between 0 and 744.' };
   }
 
   // Check if any issue for this user/month is approved — lock adjustments if so
@@ -619,7 +625,7 @@ managerResolver.define('getAdjustmentsForMonth', async ({ payload, context }) =>
   if (!isManager) return { error: 'Unauthorized' };
 
   const { month } = payload;
-  if (!month) return { adjustments: {} };
+  if (!month || !MONTH_REGEX.test(month)) return { adjustments: {} };
 
   const adjustments = {};
   let cursor;
@@ -650,7 +656,7 @@ managerResolver.define('getApprovalAuditLog', async ({ payload, context }) => {
   if (!isManager) return { error: 'Unauthorized' };
 
   const { month } = payload;
-  if (!month) return { entries: [] };
+  if (!month || !MONTH_REGEX.test(month)) return { entries: [] };
 
   const logKey = `kup_approval_log_${month}`;
   const log = await storage.get(logKey) || [];

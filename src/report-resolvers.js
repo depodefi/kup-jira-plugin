@@ -3,6 +3,8 @@ import { storage } from '@forge/api';
 import api, { route } from '@forge/api';
 import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
 
+const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
+
 const kupReportResolver = new Resolver();
 
 // 1. Get available months config for the dropdown
@@ -22,14 +24,10 @@ kupReportResolver.define('getAvailableMonths', async () => {
 // 2. Run JQL to fetch all issues assigned to current user matching the specified month
 kupReportResolver.define('getMyKupReport', async ({ payload, context }) => {
   const { month } = payload;
-  if (!month) {
+  if (!month || !MONTH_REGEX.test(month)) {
     return { issues: [], totalHours: 0, maxWorkingHours: null };
   }
 
-  // JQL specifically filtering for the current user and the Entity Property match
-  // Since Jira doesn't let us dynamically inject properties into JQL generically, 
-  // we configured "kupMonth" and "kupHours" as indexed properties in manifest.yml
-  // Use context.accountId instead of currentUser() in JQL when using asApp()
   const accountId = context.accountId;
   const jql = `assignee = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
   
@@ -42,7 +40,7 @@ kupReportResolver.define('getMyKupReport', async ({ payload, context }) => {
     });
     
     if (!res.ok) {
-      console.warn("Failed to fetch JQL search:", res.status, await res.text());
+      console.warn("Failed to fetch JQL search:", res.status);
       return { issues: [], totalHours: 0 };
     }
 

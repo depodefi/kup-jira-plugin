@@ -368,15 +368,12 @@ const ManagerApprovalView = ({ months }) => {
 
   const handleAddTeamMember = () => {
     if (!newMember) return;
-    // Log the raw UserPicker value so we can inspect the object shape
-    console.log('[UserPicker] raw value:', JSON.stringify(newMember));
     const accountId = typeof newMember === 'object'
       ? (newMember.accountId || newMember.id || newMember.value)
       : newMember;
     const displayName = typeof newMember === 'object'
       ? (newMember.name || newMember.displayName || accountId)
       : newMember;
-    console.log('[UserPicker] resolved accountId:', accountId, 'displayName:', displayName);
     if (teamMembers.some(m => m.accountId === accountId)) return;
     setTeamMembers(prev => [...prev, { accountId, displayName }]);
     setNewMember(null);

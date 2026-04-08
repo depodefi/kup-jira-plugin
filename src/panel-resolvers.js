@@ -1,6 +1,8 @@
 import Resolver from '@forge/resolver';
 import api, { route, storage } from '@forge/api';
 
+const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
+
 const panelResolver = new Resolver();
 
 /**
@@ -96,6 +98,14 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
 
   const { kupMonth, kupHours } = payload;
 
+  if (!kupMonth || !MONTH_REGEX.test(kupMonth)) {
+    return { success: false, error: 'Invalid month format' };
+  }
+  const parsedHours = Number(kupHours);
+  if (isNaN(parsedHours) || parsedHours < 0 || parsedHours > 744) {
+    return { success: false, error: 'KUP hours must be a number between 0 and 744.' };
+  }
+
   try {
     // 1. Guard: block edits on approved issues
     try {
@@ -127,7 +137,7 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
     }
 
     // 3. Save the new KUP data as an Issue Entity Property
-    const newData = { kupMonth, kupHours: Number(kupHours) || 0 };
+    const newData = { kupMonth, kupHours: parsedHours };
     const saveRes = await api.asApp().requestJira(
       route`/rest/api/3/issue/${issueId}/properties/kup-data`,
       {
