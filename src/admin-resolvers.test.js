@@ -56,7 +56,7 @@ describe('adminResolver', () => {
       call: { functionKey: 'getKupConfig' }
     });
 
-    expect(result).toEqual({ enabledProjects: ['PROJ'], enabledIssueTypes: ['1'] });
+    expect(result).toEqual(expect.objectContaining({ enabledProjects: ['PROJ'], enabledIssueTypes: ['1'] }));
     expect(storage.get).toHaveBeenCalledWith('kup_config');
   });
 

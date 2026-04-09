@@ -11,6 +11,9 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "jest": "^30.3.0"
   },
+  "jest": {
+    "testPathIgnorePatterns": ["/node_modules/", "/.claude/"]
+  },
   "dependencies": {
     "@forge/api": "^7.1.1",
     "@forge/kvs": "^1.6.0",

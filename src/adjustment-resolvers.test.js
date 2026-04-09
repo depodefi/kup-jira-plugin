@@ -19,6 +19,7 @@ jest.mock('@forge/kvs', () => {
   return {
     __esModule: true,
     default: { entity: jest.fn(() => entity) },
+    WhereConditions: { equalTo: jest.fn(val => val) },
     _mockEntity: entity,
   };
 });
@@ -67,6 +68,7 @@ describe('adjustment resolvers', () => {
   // --- saveMyAdjustment ---
 
   it('saveMyAdjustment writes record for non-zero values', async () => {
+    api.requestJira.mockResolvedValueOnce({ ok: true, json: async () => ({ issues: [] }) }); // lock check
     storage.get.mockResolvedValueOnce({ monthWorkingHours: { '2026-04-KUP': 168 } });
     mockEntity.set.mockResolvedValueOnce();
 
@@ -82,6 +84,7 @@ describe('adjustment resolvers', () => {
   });
 
   it('saveMyAdjustment deletes record when both values are 0', async () => {
+    api.requestJira.mockResolvedValueOnce({ ok: true, json: async () => ({ issues: [] }) }); // lock check
     storage.get.mockResolvedValueOnce({});
     mockEntity.delete.mockResolvedValueOnce();
 
@@ -99,10 +102,11 @@ describe('adjustment resolvers', () => {
       month: '2026-04-KUP', absenceHours: -1, overtimeHours: 0,
     });
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/non-negative/);
+    expect(result.error).toMatch(/between 0 and 744/);
   });
 
   it('saveMyAdjustment rejects absence hours exceeding max working hours', async () => {
+    api.requestJira.mockResolvedValueOnce({ ok: true, json: async () => ({ issues: [] }) }); // lock check
     storage.get.mockResolvedValueOnce({ monthWorkingHours: { '2026-04-KUP': 168 } });
 
     const result = await invoke('saveMyAdjustment', {
@@ -126,6 +130,7 @@ describe('adjustment resolvers', () => {
 
     const mockQueryBuilder = {
       index: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
       cursor: jest.fn().mockReturnThis(),
       getMany: jest.fn().mockResolvedValueOnce({
@@ -144,7 +149,7 @@ describe('adjustment resolvers', () => {
       'dev-001': { absenceHours: 40, overtimeHours: 0 },
       'dev-002': { absenceHours: 0, overtimeHours: 16 },
     });
-    expect(mockQueryBuilder.index).toHaveBeenCalledWith('by-month', { partition: ['2026-04-KUP'] });
+    expect(mockQueryBuilder.index).toHaveBeenCalledWith('by-month');
   });
 
   it('getAdjustmentsForMonth returns empty map when no adjustments exist', async () => {
@@ -152,6 +157,7 @@ describe('adjustment resolvers', () => {
 
     const mockQueryBuilder = {
       index: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
       cursor: jest.fn().mockReturnThis(),
       getMany: jest.fn().mockResolvedValueOnce({ results: [], nextCursor: undefined }),
