@@ -120,7 +120,7 @@ const AdminSettings = () => {
     setErrorMSG(null);
     try {
       const parsedMax = parseFloat(maxKupPercent);
-      await invoke('saveKupConfig', {
+      const result = await invoke('saveKupConfig', {
         enableAll,
         enabledProjects,
         projectSpecificIssueTypes: projectIssueTypes,
@@ -135,8 +135,12 @@ const AdminSettings = () => {
           costCenter: exportCostCenterField || null,
         },
       });
-      setSuccess(true);
-      setHasUnsavedChanges(false);
+      if (result?.success) {
+        setSuccess(true);
+        setHasUnsavedChanges(false);
+      } else {
+        setErrorMSG('Failed to save configuration: ' + (result?.error || 'Unknown error'));
+      }
     } catch (err) {
       setErrorMSG('Failed to save configuration: ' + err.message);
     } finally {

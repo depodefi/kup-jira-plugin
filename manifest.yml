@@ -65,10 +65,9 @@ permissions:
     - read:jira-work
     - write:jira-work
     - read:jira-user
+    # Required by GET /rest/api/3/group/member (Jira-group filter in the
+    # manager report) — verified via forge lint; no narrower scope satisfies it.
     - manage:jira-configuration
-  content:
-    styles:
-      - unsafe-inline
 app:
   runtime:
     name: nodejs24.x

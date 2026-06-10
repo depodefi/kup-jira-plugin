@@ -10,6 +10,8 @@ const adjustmentEntity = kvs.entity('user-monthly-adjustment');
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
 const VALID_STATUS_FILTERS = ['all', 'pending', 'approved'];
+const ACCOUNT_ID_REGEX = /^[a-zA-Z0-9:-]{1,128}$/;
+const MAX_TEAM_MEMBERS = 100;
 
 const managerResolver = new Resolver();
 
@@ -512,8 +514,13 @@ managerResolver.define('getAvailableMonths', async () => {
 
 /**
  * getJiraGroups: Returns all Jira groups for the group filter dropdown.
+ * Manager-only — group names would otherwise leak to users without
+ * the "Browse users and groups" permission.
  */
-managerResolver.define('getJiraGroups', async () => {
+managerResolver.define('getJiraGroups', async ({ context }) => {
+  const isManager = await checkIsManager(context.accountId);
+  if (!isManager) return { error: 'Unauthorized' };
+
   const res = await api.asApp().requestJira(route`/rest/api/3/groups/picker?query=&maxResults=50`);
   const data = await res.json();
   return (data.groups || []).map(g => ({ groupId: g.groupId, name: g.name }));
@@ -531,12 +538,31 @@ managerResolver.define('getManagerTeam', async ({ context }) => {
 
 /**
  * saveManagerTeam: Saves the manager's custom team.
- * Expects payload.members to be an array of accountId strings.
+ * Accepts members as { accountId, displayName } objects or plain accountId
+ * strings; everything else is rejected and unknown keys are stripped.
  */
 managerResolver.define('saveManagerTeam', async ({ payload, context }) => {
   const accountId = context.accountId;
-  const { members } = payload;
-  await storage.set(`kup_manager_team_${accountId}`, { members });
+  const members = payload?.members;
+
+  if (!Array.isArray(members) || members.length > MAX_TEAM_MEMBERS) {
+    return { success: false, error: `Members must be an array of at most ${MAX_TEAM_MEMBERS} entries.` };
+  }
+
+  const sanitized = [];
+  for (const m of members) {
+    const memberId = typeof m === 'string' ? m : m?.accountId;
+    const displayName = (typeof m === 'object' && typeof m?.displayName === 'string') ? m.displayName : memberId;
+    if (typeof memberId !== 'string' || !ACCOUNT_ID_REGEX.test(memberId)) {
+      return { success: false, error: 'Invalid member account ID.' };
+    }
+    if (typeof displayName !== 'string' || displayName.length > 255) {
+      return { success: false, error: 'Invalid member display name.' };
+    }
+    sanitized.push({ accountId: memberId, displayName });
+  }
+
+  await storage.set(`kup_manager_team_${accountId}`, { members: sanitized });
   return { success: true };
 });
 

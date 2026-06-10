@@ -37,7 +37,6 @@ describe('adminResolver', () => {
     const result = await adminHandler({
       context: {},
       contextToken: 'token',
-      payload: {},
       call: { functionKey: 'getJiraContext' }
     });
 
@@ -66,11 +65,90 @@ describe('adminResolver', () => {
     const result = await adminHandler({
       context: {},
       contextToken: 'token',
-      payload: { enabledProjects: ['PROJ'], enabledIssueTypes: ['1'] },
-      call: { functionKey: 'saveKupConfig' }
+      call: { functionKey: 'saveKupConfig', payload: { enabledProjects: ['PROJ'], enabledIssueTypes: ['1'] } }
     });
 
     expect(result).toEqual({ success: true });
     expect(storage.set).toHaveBeenCalledWith('kup_config', expect.anything());
+  });
+
+  it('saveKupConfig accepts a full valid config payload', async () => {
+    storage.set.mockResolvedValueOnce();
+
+    const result = await adminHandler({
+      context: {},
+      contextToken: 'token',
+      call: { functionKey: 'saveKupConfig', payload: {
+        enableAll: false,
+        enabledProjects: ['10000'],
+        projectSpecificIssueTypes: { '10000': ['1', '2'] },
+        availableMonths: ['2026-01-KUP', '2026-02-KUP'],
+        monthWorkingHours: { '2026-01-KUP': 168 },
+        managerUsers: ['557058:abc-def'],
+        managerGroups: ['9f0c2a4e-1b2c-4d5e-8f90-aabbccddeeff'],
+        maxKupPercent: 20,
+        kupLimitEnforcement: 'block',
+        exportFieldMappings: { employeeId: 'customfield_10050', costCenter: null },
+      } }
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(storage.set).toHaveBeenCalledWith('kup_config', expect.anything());
+  });
+
+  it('saveKupConfig rejects unknown config keys', async () => {
+    const result = await adminHandler({
+      context: {},
+      contextToken: 'token',
+      call: { functionKey: 'saveKupConfig', payload: { enableAll: true, injected: 'junk' } }
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('injected');
+    expect(storage.set).not.toHaveBeenCalled();
+  });
+
+  it('saveKupConfig rejects malformed availableMonths entries', async () => {
+    const result = await adminHandler({
+      context: {},
+      contextToken: 'token',
+      call: { functionKey: 'saveKupConfig', payload: { availableMonths: ['2026-01-KUP', 'not-a-month'] } }
+    });
+
+    expect(result.success).toBe(false);
+    expect(storage.set).not.toHaveBeenCalled();
+  });
+
+  it('saveKupConfig rejects out-of-range working hours', async () => {
+    const result = await adminHandler({
+      context: {},
+      contextToken: 'token',
+      call: { functionKey: 'saveKupConfig', payload: { monthWorkingHours: { '2026-01-KUP': 999 } } }
+    });
+
+    expect(result.success).toBe(false);
+    expect(storage.set).not.toHaveBeenCalled();
+  });
+
+  it('saveKupConfig rejects invalid exportFieldMappings values', async () => {
+    const result = await adminHandler({
+      context: {},
+      contextToken: 'token',
+      call: { functionKey: 'saveKupConfig', payload: { exportFieldMappings: { employeeId: 'summary' } } }
+    });
+
+    expect(result.success).toBe(false);
+    expect(storage.set).not.toHaveBeenCalled();
+  });
+
+  it('saveKupConfig rejects invalid kupLimitEnforcement values', async () => {
+    const result = await adminHandler({
+      context: {},
+      contextToken: 'token',
+      call: { functionKey: 'saveKupConfig', payload: { kupLimitEnforcement: 'ignore' } }
+    });
+
+    expect(result.success).toBe(false);
+    expect(storage.set).not.toHaveBeenCalled();
   });
 });

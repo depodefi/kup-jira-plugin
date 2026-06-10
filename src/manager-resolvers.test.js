@@ -289,4 +289,65 @@ describe('managerResolver', () => {
     expect(result).toEqual({ success: true, unapprovedCount: 0 });
     expect(api.requestJira).toHaveBeenCalledTimes(2);
   });
+
+  // --- getJiraGroups ---
+
+  it('getJiraGroups returns Unauthorized for non-managers', async () => {
+    storage.get.mockResolvedValueOnce({ managerUsers: [], managerGroups: [] });
+
+    const result = await invoke('getJiraGroups', {}, 'dev-001');
+    expect(result).toEqual({ error: 'Unauthorized' });
+    expect(api.requestJira).not.toHaveBeenCalled();
+  });
+
+  it('getJiraGroups returns group list for managers', async () => {
+    storage.get.mockResolvedValueOnce(managerConfig);
+
+    api.requestJira.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ groups: [{ groupId: 'g-1', name: 'developers', html: '<b>x</b>' }] }),
+    });
+
+    const result = await invoke('getJiraGroups');
+    expect(result).toEqual([{ groupId: 'g-1', name: 'developers' }]);
+  });
+
+  // --- saveManagerTeam validation ---
+
+  it('saveManagerTeam rejects a non-array members payload', async () => {
+    const result = await invoke('saveManagerTeam', { members: { evil: true } });
+    expect(result.success).toBe(false);
+    expect(storage.set).not.toHaveBeenCalled();
+  });
+
+  it('saveManagerTeam rejects more than 100 members', async () => {
+    const members = Array.from({ length: 101 }, (_, i) => ({ accountId: `id-${i}`, displayName: `User ${i}` }));
+    const result = await invoke('saveManagerTeam', { members });
+    expect(result.success).toBe(false);
+    expect(storage.set).not.toHaveBeenCalled();
+  });
+
+  it('saveManagerTeam rejects malformed account IDs', async () => {
+    const result = await invoke('saveManagerTeam', {
+      members: [{ accountId: '" OR assignee IS NOT EMPTY', displayName: 'Evil' }],
+    });
+    expect(result.success).toBe(false);
+    expect(storage.set).not.toHaveBeenCalled();
+  });
+
+  it('saveManagerTeam strips unknown keys and stores sanitized members', async () => {
+    const result = await invoke('saveManagerTeam', {
+      members: [
+        { accountId: '557058:abc-def', displayName: 'Alice', extraneous: { huge: 'junk' } },
+        'dev-002',
+      ],
+    });
+    expect(result).toEqual({ success: true });
+    expect(storage.set).toHaveBeenCalledWith('kup_manager_team_manager-001', {
+      members: [
+        { accountId: '557058:abc-def', displayName: 'Alice' },
+        { accountId: 'dev-002', displayName: 'dev-002' },
+      ],
+    });
+  });
 });
