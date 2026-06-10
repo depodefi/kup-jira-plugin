@@ -1,9 +1,73 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import ForgeReconciler, {
   Box, Stack, Inline, Heading, Select, DynamicTable, Spinner,
-  Text, Strong, Button, SectionMessage, Lozenge, Link, Label, UserPicker, User, Textfield,
+  Text, Strong, Button, SectionMessage, Lozenge, Link, Label, UserPicker, Textfield,
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
+
+// ---------------------------------------------------------------------------
+// Helpers shared across views
+// ---------------------------------------------------------------------------
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
+// "2026-05-KUP" -> "May 2026"
+const formatMonthLabel = (raw) => {
+  if (!raw) return '';
+  const [y, m] = raw.split('-');
+  const idx = Number(m) - 1;
+  if (idx < 0 || idx > 11) return raw;
+  return `${MONTH_NAMES[idx]} ${y}`;
+};
+
+const toMonthOptions = (months) =>
+  months.map(m => ({ label: formatMonthLabel(m.value), value: m.value }));
+
+const currentMonthDefault = (months) => {
+  const d = new Date();
+  const currentMonthString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-KUP`;
+  return months.find(o => o.value === currentMonthString) || months[0];
+};
+
+// Lozenge appearance + label from adjusted KUP %.
+const computeStatus = (pct, cap) => {
+  if (pct == null || isNaN(pct)) return { appearance: 'default', label: 'No data' };
+  if (cap > 0 && pct > cap) return { appearance: 'removed', label: 'Over limit' };
+  if (cap > 0 && pct > cap * 0.9) return { appearance: 'moved', label: 'Approaching limit' };
+  if (pct < 1) return { appearance: 'default', label: 'No activity' };
+  return { appearance: 'success', label: 'On track' };
+};
+
+// Tinted stat card built from Box primitives — UI Kit has no card component.
+// flexGrow + width make sibling cards share an Inline row at equal widths.
+const StatCard = ({ label, value, suffix, footer, backgroundColor = 'color.background.neutral' }) => (
+  <Box padding="space.200" backgroundColor={backgroundColor} xcss={{ borderRadius: 'radius.small', flexGrow: 1, width: '100%' }}>
+    <Stack space="space.100">
+      <Text size="small" weight="bold" color="color.text.subtlest">{label}</Text>
+      <Inline space="space.050" alignBlock="baseline">
+        <Heading size="large">{value}</Heading>
+        {suffix && <Text size="medium" color="color.text.subtle">{suffix}</Text>}
+      </Inline>
+      <Box>{footer}</Box>
+    </Stack>
+  </Box>
+);
+
+// Browser download from a base64 payload (same pattern as the payroll export).
+const triggerDownload = (base64Data, filename, mimeType) => {
+  const bytes = atob(base64Data);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  const blob = new Blob([arr], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
 
 const STATUS_FILTER_OPTIONS = [
   { label: 'All', value: 'all' },
@@ -25,9 +89,7 @@ const MyReportView = ({ months }) => {
   const [adjustmentMessage, setAdjustmentMessage] = useState(null); // { type, text }
 
   useEffect(() => {
-    const d = new Date();
-    const currentMonthString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-KUP`;
-    const defaultOption = months.find(o => o.value === currentMonthString) || months[0];
+    const defaultOption = currentMonthDefault(months);
     if (defaultOption) setSelectedMonth(defaultOption);
   }, [months]);
 
@@ -85,13 +147,11 @@ const MyReportView = ({ months }) => {
   // Live-preview adjusted KUP %
   const absence = parseFloat(absenceHours) || 0;
   const overtime = parseFloat(overtimeHours) || 0;
-  const adjustedBase = (reportData.maxWorkingHours ?? 0) - absence + overtime;
+  const maxWorking = reportData.maxWorkingHours ?? 0;
+  const adjustedBase = maxWorking - absence + overtime;
   const hasAdjustment = absence !== 0 || overtime !== 0;
-  const effectiveBase = hasAdjustment ? adjustedBase : (reportData.maxWorkingHours ?? 0);
+  const effectiveBase = hasAdjustment ? adjustedBase : maxWorking;
   const kupPctNum = effectiveBase > 0 ? reportData.totalHours / effectiveBase * 100 : null;
-  const kupPct = reportData.maxWorkingHours > 0
-    ? kupPctNum !== null ? `${kupPctNum.toFixed(1)}%` : 'N/A'
-    : '—';
 
   // KUP limit warning for employee
   const maxKupPercent = reportData.maxKupPercent;
@@ -99,6 +159,27 @@ const MyReportView = ({ months }) => {
   const isOverLimit = maxKupPercent && kupPctNum !== null && kupPctNum > maxKupPercent;
   const maxKupHours = maxKupPercent && effectiveBase > 0 ? effectiveBase * (maxKupPercent / 100) : null;
   const remainingHours = maxKupHours !== null ? (maxKupHours - reportData.totalHours).toFixed(1) : null;
+  const status = computeStatus(kupPctNum, maxKupPercent || 0);
+
+  const sortedIssues = useMemo(
+    () => [...(reportData.issues || [])].sort((a, b) => b.hours - a.hours),
+    [reportData.issues]
+  );
+
+  const issueCount = reportData.issues?.length || 0;
+  const baseFooter = hasAdjustment ? (
+    <Text size="small" color="color.text.subtlest">
+      {maxWorking}h max − {absence}h absence{overtime > 0 ? ` + ${overtime}h overtime` : ''}
+    </Text>
+  ) : (
+    <Text size="small" color="color.text.subtlest">
+      {selectedMonth ? formatMonthLabel(selectedMonth.value) : ''}
+    </Text>
+  );
+
+  const pctFooter = kupPctNum != null
+    ? <Lozenge appearance={status.appearance}>{status.label}</Lozenge>
+    : <Text size="small" color="color.text.subtlest">No working hours set</Text>;
 
   const head = {
     cells: [
@@ -108,60 +189,53 @@ const MyReportView = ({ months }) => {
     ],
   };
 
-  const rows = reportData.issues.map((issue, i) => ({
+  const rows = sortedIssues.map((issue, i) => ({
     key: `row-${i}-${issue.key}`,
     cells: [
       { key: 'issue', content: <Link href={`/browse/${issue.key}`} openNewTab={true}>{issue.key}</Link> },
       { key: 'summary', content: <Text>{issue.summary}</Text> },
-      { key: 'hours', content: <Text>{issue.hours}</Text> },
+      { key: 'hours', content: <Strong>{issue.hours}</Strong> },
     ],
   }));
 
   return (
     <Stack space="space.300">
-      <Box>
-        <Label labelFor="my-month-select">Month</Label>
-        <Select
-          inputId="my-month-select"
-          options={months}
-          value={selectedMonth}
-          onChange={setSelectedMonth}
-          isClearable={false}
-          isLoading={fetching}
-        />
+      <Box xcss={{ maxWidth: '320px' }}>
+        <Stack space="space.050">
+          <Label labelFor="my-month-select">Month</Label>
+          <Select
+            inputId="my-month-select"
+            options={toMonthOptions(months)}
+            value={selectedMonth ? { label: formatMonthLabel(selectedMonth.value), value: selectedMonth.value } : null}
+            onChange={setSelectedMonth}
+            isClearable={false}
+            isLoading={fetching}
+          />
+        </Stack>
       </Box>
 
       {fetching ? (
         <Spinner size="medium" />
       ) : (
         <Stack space="space.300">
-          <DynamicTable
-            head={head}
-            rows={rows}
-            emptyView="You have zero KUP hours logged on assigned issues for this month."
-          />
-
-          {/* KUP limit warning */}
-          {isOverLimit && (
-            <SectionMessage appearance="warning">
-              <Text>
-                {kupLimitEnforcement === 'block'
-                  ? `Your KUP is ${kupPctNum.toFixed(1)}%, which exceeds the company limit of ${maxKupPercent}%. Your manager will not be able to approve your hours until this is resolved. You have ${remainingHours} KUP hours remaining.`
-                  : `Your KUP is ${kupPctNum.toFixed(1)}%, which exceeds the company limit of ${maxKupPercent}%. Your manager will see a warning when reviewing your hours.`}
-              </Text>
-            </SectionMessage>
-          )}
-
-          {/* Hours adjustment */}
-          <Box padding="space.200">
+          {/* Hours adjustment — placed first so the values feed forward
+              into the KPI cards below. */}
+          <Box padding="space.250" backgroundColor="color.background.neutral" xcss={{ borderRadius: 'radius.small' }}>
             <Stack space="space.200">
-              <Heading size="small">Hours Adjustment</Heading>
+              <Inline spread="space-between" alignBlock="center">
+                <Heading size="small">Hours adjustment</Heading>
+                <Text size="small" color="color.text.subtle">
+                  Claim absence to reduce your base, or overtime to raise it.
+                </Text>
+              </Inline>
+
               {isLocked && (
                 <SectionMessage appearance="information">
                   <Text>Adjustments are locked — your hours for this month have been approved. Contact your manager to unapprove first.</Text>
                 </SectionMessage>
               )}
-              <Inline space="space.300" alignBlock="end">
+
+              <Inline space="space.200" alignBlock="end">
                 <Stack space="space.050">
                   <Label labelFor="absence-hours">Absence hours this month</Label>
                   <Textfield
@@ -187,9 +261,10 @@ const MyReportView = ({ months }) => {
                   />
                 </Stack>
                 <Button appearance="primary" onClick={handleSaveAdjustment} isDisabled={adjustmentSaving || isLocked}>
-                  {adjustmentSaving ? 'Saving...' : 'Save Adjustment'}
+                  {adjustmentSaving ? 'Saving...' : 'Save adjustment'}
                 </Button>
               </Inline>
+
               {adjustmentMessage && (
                 <SectionMessage appearance={adjustmentMessage.type}>
                   <Text>{adjustmentMessage.text}</Text>
@@ -198,19 +273,54 @@ const MyReportView = ({ months }) => {
             </Stack>
           </Box>
 
-          {/* Summary */}
-          <Inline space="space.400" alignBlock="center">
-            <Text>Total KUP hours: <Strong>{reportData.totalHours}</Strong></Text>
-            <Text>Max hours: <Strong>{reportData.maxWorkingHours ?? '—'}</Strong></Text>
-            {hasAdjustment && (
-              <>
-                <Text>Absence: <Strong>{absence}</Strong></Text>
-                <Text>Overtime: <Strong>{overtime}</Strong></Text>
-                <Text>Adjusted base: <Strong>{adjustedBase > 0 ? adjustedBase : 'N/A'}</Strong></Text>
-              </>
-            )}
-            <Text>KUP %: <Strong>{kupPct}</Strong></Text>
+          {/* Three KPI cards */}
+          <Inline space="space.200" alignBlock="stretch">
+            <StatCard
+              label="KUP HOURS"
+              value={reportData.totalHours ?? 0}
+              suffix="h"
+              footer={
+                <Text size="small" color="color.text.subtlest">
+                  across {issueCount} issue{issueCount === 1 ? '' : 's'}
+                </Text>
+              }
+            />
+            <StatCard
+              label={hasAdjustment ? 'EFFECTIVE BASE' : 'MAX WORKING HOURS'}
+              value={hasAdjustment
+                ? (adjustedBase > 0 ? adjustedBase : 'N/A')
+                : (maxWorking || '—')}
+              suffix={maxWorking ? 'h' : undefined}
+              footer={baseFooter}
+            />
+            <StatCard
+              label="KUP %"
+              value={kupPctNum != null ? kupPctNum.toFixed(1) : '—'}
+              suffix={kupPctNum != null ? '%' : undefined}
+              footer={pctFooter}
+            />
           </Inline>
+
+          {/* KUP limit warning */}
+          {isOverLimit && (
+            <SectionMessage appearance="warning">
+              <Text>
+                {kupLimitEnforcement === 'block'
+                  ? `Your KUP is ${kupPctNum.toFixed(1)}%, which exceeds the company limit of ${maxKupPercent}%. Your manager will not be able to approve your hours until this is resolved. You have ${remainingHours} KUP hours remaining.`
+                  : `Your KUP is ${kupPctNum.toFixed(1)}%, which exceeds the company limit of ${maxKupPercent}%. Your manager will see a warning when reviewing your hours.`}
+              </Text>
+            </SectionMessage>
+          )}
+
+          {/* Issues table */}
+          <Stack space="space.100">
+            <Heading size="small">Issues</Heading>
+            <DynamicTable
+              head={head}
+              rows={rows}
+              emptyView="You have zero KUP hours logged on assigned issues for this month."
+            />
+          </Stack>
         </Stack>
       )}
     </Stack>
@@ -221,6 +331,10 @@ const MyReportView = ({ months }) => {
 // Manager Approval view
 // ---------------------------------------------------------------------------
 const ALL_GROUPS_OPTION = { label: 'All users', value: null };
+const EXPORT_FORMAT_OPTIONS = [
+  { label: 'Excel (.xlsx)', value: 'xlsx' },
+  { label: 'CSV (.csv)', value: 'csv' },
+];
 
 const ManagerApprovalView = ({ months }) => {
   const [selectedMonth, setSelectedMonth] = useState(null);
@@ -230,6 +344,12 @@ const ManagerApprovalView = ({ months }) => {
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [actionMessage, setActionMessage] = useState(null);
   const [actionLoading, setActionLoading] = useState({});
+
+  // Export state
+  const [exportFormat, setExportFormat] = useState(EXPORT_FORMAT_OPTIONS[0]);
+  const [exportStatus, setExportStatus] = useState(null); // null | 'processing' | 'ready' | 'error' | 'timeout'
+  const [exportResult, setExportResult] = useState(null);
+  const [exportErrorMsg, setExportErrorMsg] = useState(null);
 
   // Adjustments (second pass)
   const [adjustmentsMap, setAdjustmentsMap] = useState({});
@@ -248,9 +368,7 @@ const ManagerApprovalView = ({ months }) => {
 
   // Default month and load groups + team on mount
   useEffect(() => {
-    const d = new Date();
-    const currentMonthString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-KUP`;
-    const defaultOption = months.find(o => o.value === currentMonthString) || months[0];
+    const defaultOption = currentMonthDefault(months);
     if (defaultOption) setSelectedMonth(defaultOption);
 
     Promise.all([
@@ -397,6 +515,83 @@ const ManagerApprovalView = ({ months }) => {
     }
   };
 
+  const handleExport = async () => {
+    if (!selectedMonth) return;
+    setExportStatus('processing');
+    setExportResult(null);
+    setExportErrorMsg(null);
+
+    try {
+      const result = await invoke('requestPayrollExport', {
+        month: selectedMonth.value,
+        format: exportFormat.value,
+      });
+
+      if (result.error) {
+        setExportStatus('error');
+        setExportErrorMsg(result.error);
+        return;
+      }
+
+      const startTime = Date.now();
+      const TIMEOUT_MS = 60000;
+      const POLL_INTERVAL_MS = 3000;
+
+      const poll = async () => {
+        if (Date.now() - startTime >= TIMEOUT_MS) {
+          setExportStatus('timeout');
+          return;
+        }
+
+        try {
+          const statusResult = await invoke('getExportStatus', { month: selectedMonth.value });
+          if (statusResult.status === 'ready') {
+            setExportResult(statusResult);
+            setExportStatus('ready');
+          } else if (statusResult.status === 'error') {
+            setExportStatus('error');
+            setExportErrorMsg(statusResult.message || 'Export failed.');
+          } else {
+            setTimeout(poll, POLL_INTERVAL_MS);
+          }
+        } catch (err) {
+          setExportStatus('error');
+          setExportErrorMsg(err.message || 'Polling failed.');
+        }
+      };
+
+      setTimeout(poll, POLL_INTERVAL_MS);
+    } catch (err) {
+      setExportStatus('error');
+      setExportErrorMsg(err.message || 'Unexpected error.');
+    }
+  };
+
+  const maxH = reportData?.maxWorkingHours;
+  const mgrMaxKupPercent = reportData?.maxKupPercent;
+  const mgrEnforcement = reportData?.kupLimitEnforcement ?? 'warn';
+
+  // Adjusted KUP % for a user — shared by the table rows and the summary strip.
+  const computeUserPct = (user) => {
+    if (!(maxH > 0)) return null;
+    const adj = adjustmentsMap[user.accountId];
+    const base = adj ? maxH - (adj.absenceHours ?? 0) + (adj.overtimeHours ?? 0) : maxH;
+    return base > 0 ? user.totalHours / base * 100 : null;
+  };
+
+  const users = reportData?.users || [];
+
+  // Summary strip metrics
+  const approvedCount = users.filter(u => u.status === 'approved').length;
+  const pendingCount = users.length - approvedCount;
+  const overLimitCount = mgrMaxKupPercent
+    ? users.filter(u => {
+        const pct = computeUserPct(u);
+        return pct !== null && pct > mgrMaxKupPercent;
+      }).length
+    : 0;
+  const totalHoursAll = users.reduce((s, u) => s + (u.totalHours || 0), 0);
+
   const head = {
     cells: [
       { key: 'user', content: 'User', width: 18 },
@@ -411,7 +606,6 @@ const ManagerApprovalView = ({ months }) => {
     ],
   };
 
-  const users = reportData?.users || [];
   const rows = [];
 
   for (const user of users) {
@@ -420,27 +614,17 @@ const ManagerApprovalView = ({ months }) => {
     const adj = adjustmentsMap[user.accountId];
     const absenceH = adj?.absenceHours ?? null;
     const overtimeH = adj?.overtimeHours ?? null;
-    const maxH = reportData?.maxWorkingHours;
 
-    let kupPctNum = null;
+    const kupPctNum = computeUserPct(user);
     let kupPct = '—';
     if (maxH > 0) {
-      if (adj) {
-        const adjustedBase = maxH - (absenceH ?? 0) + (overtimeH ?? 0);
-        if (adjustedBase > 0) {
-          kupPctNum = user.totalHours / adjustedBase * 100;
-          kupPct = `${kupPctNum.toFixed(1)}%`;
-        } else {
-          kupPct = 'N/A';
-        }
+      if (kupPctNum !== null) {
+        kupPct = !adj && fetchingAdjustments ? '…' : `${kupPctNum.toFixed(1)}%`;
       } else {
-        kupPctNum = user.totalHours / maxH * 100;
-        kupPct = fetchingAdjustments ? '…' : `${kupPctNum.toFixed(1)}%`;
+        kupPct = 'N/A';
       }
     }
 
-    const mgrMaxKupPercent = reportData?.maxKupPercent;
-    const mgrEnforcement = reportData?.kupLimitEnforcement ?? 'warn';
     const userOverLimit = mgrMaxKupPercent && kupPctNum !== null && kupPctNum > mgrMaxKupPercent;
     const approveBlocked = userOverLimit && mgrEnforcement === 'block';
 
@@ -461,7 +645,7 @@ const ManagerApprovalView = ({ months }) => {
           ),
         },
         { key: 'issues', content: <Text>{user.issueCount}</Text> },
-        { key: 'totalHours', content: <Text>{user.totalHours}</Text> },
+        { key: 'totalHours', content: <Strong>{user.totalHours}</Strong> },
         { key: 'maxHours', content: <Text>{maxH ?? '—'}</Text> },
         { key: 'absence', content: <Text>{absenceH !== null ? absenceH : '—'}</Text> },
         { key: 'overtime', content: <Text>{overtimeH !== null ? overtimeH : '—'}</Text> },
@@ -523,60 +707,59 @@ const ManagerApprovalView = ({ months }) => {
 
   return (
     <Stack space="space.300">
-      {/* Main filter controls */}
-      <Inline space="space.300" alignBlock="end">
-        <Stack space="space.050">
-          <Label labelFor="mgr-month-select">Month</Label>
-          <Select
-            inputId="mgr-month-select"
-            options={months}
-            value={selectedMonth}
-            onChange={setSelectedMonth}
-            isClearable={false}
-          />
-        </Stack>
-        <Stack space="space.050">
-          <Label labelFor="mgr-status-filter">Status</Label>
-          <Select
-            inputId="mgr-status-filter"
-            options={STATUS_FILTER_OPTIONS}
-            value={statusFilter}
-            onChange={setStatusFilter}
-            isClearable={false}
-          />
-        </Stack>
-        <Stack space="space.050">
-          <Label labelFor="mgr-group-filter">Jira Group</Label>
-          <Select
-            inputId="mgr-group-filter"
-            options={jiraGroups}
-            value={groupFilter}
-            onChange={setGroupFilter}
-            isClearable={false}
-          />
-        </Stack>
-        <Button
-          appearance={myTeamActive ? 'primary' : 'default'}
-          onClick={() => setMyTeamActive(a => !a)}
-        >
-          {myTeamActive ? 'My Team ✓' : 'My Team'}
+      {/* Filter row — controls left, team management right */}
+      <Inline spread="space-between" alignBlock="end">
+        <Inline space="space.200" alignBlock="end">
+          <Stack space="space.050">
+            <Label labelFor="mgr-month-select">Month</Label>
+            <Select
+              inputId="mgr-month-select"
+              options={toMonthOptions(months)}
+              value={selectedMonth ? { label: formatMonthLabel(selectedMonth.value), value: selectedMonth.value } : null}
+              onChange={setSelectedMonth}
+              isClearable={false}
+            />
+          </Stack>
+          <Stack space="space.050">
+            <Label labelFor="mgr-status-filter">Status</Label>
+            <Select
+              inputId="mgr-status-filter"
+              options={STATUS_FILTER_OPTIONS}
+              value={statusFilter}
+              onChange={setStatusFilter}
+              isClearable={false}
+            />
+          </Stack>
+          <Stack space="space.050">
+            <Label labelFor="mgr-group-filter">Jira group</Label>
+            <Select
+              inputId="mgr-group-filter"
+              options={jiraGroups}
+              value={groupFilter}
+              onChange={setGroupFilter}
+              isClearable={false}
+            />
+          </Stack>
+          <Button
+            appearance={myTeamActive ? 'primary' : 'default'}
+            onClick={() => setMyTeamActive(a => !a)}
+          >
+            {myTeamActive ? 'My Team ✓' : 'My Team'}
+          </Button>
+          <Button onClick={fetchReport} isDisabled={fetching}>Refresh</Button>
+        </Inline>
+        <Button appearance="subtle" onClick={() => setShowTeamEditor(e => !e)}>
+          {showTeamEditor ? 'Hide team editor' : 'Manage my team'}
         </Button>
-        <Button onClick={fetchReport} isDisabled={fetching}>Refresh</Button>
       </Inline>
 
-      {/* My Team editor toggle */}
-      <Inline space="space.200" alignBlock="center">
-        <Button appearance="subtle" onClick={() => setShowTeamEditor(e => !e)}>
-          {showTeamEditor ? 'Hide Team Editor' : 'Manage My Team'}
-        </Button>
-        {myTeamActive && teamMembers.length === 0 && (
-          <Text>Your team is empty — add members below to use this filter.</Text>
-        )}
-      </Inline>
+      {myTeamActive && teamMembers.length === 0 && (
+        <Text>Your team is empty — add members below to use this filter.</Text>
+      )}
 
       {/* Team editor panel */}
       {showTeamEditor && (
-        <Box padding="space.200">
+        <Box padding="space.250" backgroundColor="color.background.neutral" xcss={{ borderRadius: 'radius.small' }}>
           <Stack space="space.200">
             <Heading size="small">My Team</Heading>
 
@@ -614,6 +797,37 @@ const ManagerApprovalView = ({ months }) => {
         </Box>
       )}
 
+      {/* Summary strip */}
+      {!fetching && reportData && (
+        <Inline space="space.200" alignBlock="stretch">
+          <StatCard
+            label="USERS"
+            value={users.length}
+            footer={<Text size="small" color="color.text.subtlest">in current view</Text>}
+          />
+          <StatCard
+            label="APPROVED"
+            value={approvedCount}
+            footer={<Text size="small" color="color.text.subtlest">fully approved</Text>}
+          />
+          <StatCard
+            label="PENDING"
+            value={pendingCount}
+            footer={<Text size="small" color="color.text.subtlest">awaiting review</Text>}
+          />
+          <StatCard
+            label="OVER LIMIT"
+            value={overLimitCount}
+            backgroundColor={overLimitCount > 0 ? 'color.background.danger' : 'color.background.neutral'}
+            footer={
+              <Text size="small" color="color.text.subtlest">
+                {mgrMaxKupPercent ? `${mgrMaxKupPercent}% cap` : 'no cap set'}
+              </Text>
+            }
+          />
+        </Inline>
+      )}
+
       {/* Action feedback */}
       {actionMessage && (
         <SectionMessage appearance={actionMessage.type}>
@@ -629,10 +843,74 @@ const ManagerApprovalView = ({ months }) => {
       )}
 
       {!fetching && reportData && users.length > 0 && (
-        <Text>
-          <Strong>{users.length}</Strong> user{users.length !== 1 ? 's' : ''} · Max working hours this month: <Strong>{reportData.maxWorkingHours ?? '—'}</Strong>
+        <Text size="small" color="color.text.subtlest">
+          <Strong>{users.length}</Strong> user{users.length !== 1 ? 's' : ''} · <Strong>{totalHoursAll}h</Strong> total logged · max working hours this month: <Strong>{maxH ?? '—'}</Strong>
         </Text>
       )}
+
+      {/* Payroll export */}
+      <Box padding="space.250" backgroundColor="color.background.neutral" xcss={{ borderRadius: 'radius.small' }}>
+        <Stack space="space.200">
+          <Inline spread="space-between" alignBlock="center">
+            <Heading size="small">Export Payroll Summary</Heading>
+            <Text size="small" color="color.text.subtle">
+              One row per employee with KUP hours, for accounting.
+            </Text>
+          </Inline>
+          <Inline space="space.200" alignBlock="end">
+            <Stack space="space.050">
+              <Label labelFor="export-format-select">Format</Label>
+              <Select
+                inputId="export-format-select"
+                options={EXPORT_FORMAT_OPTIONS}
+                value={exportFormat}
+                onChange={v => { setExportFormat(v); setExportStatus(null); setExportResult(null); }}
+                isClearable={false}
+              />
+            </Stack>
+            <Button
+              appearance="default"
+              onClick={handleExport}
+              isDisabled={!selectedMonth || exportStatus === 'processing'}
+            >
+              {exportStatus === 'processing' ? 'Generating...' : 'Generate Export'}
+            </Button>
+            {exportStatus === 'processing' && <Spinner size="small" />}
+          </Inline>
+
+          {exportStatus === 'ready' && exportResult && (
+            <SectionMessage appearance="confirmation">
+              <Inline space="space.200" alignBlock="center">
+                <Text>Export ready.</Text>
+                <Button
+                  appearance="primary"
+                  onClick={() => triggerDownload(
+                    exportResult.data,
+                    exportResult.filename,
+                    exportResult.format === 'xlsx'
+                      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                      : 'text/csv;charset=utf-8'
+                  )}
+                >
+                  Download {exportResult.filename}
+                </Button>
+              </Inline>
+            </SectionMessage>
+          )}
+
+          {exportStatus === 'error' && (
+            <SectionMessage appearance="error">
+              <Text>Export failed: {exportErrorMsg}</Text>
+            </SectionMessage>
+          )}
+
+          {exportStatus === 'timeout' && (
+            <SectionMessage appearance="warning">
+              <Text>Export timed out after 60 seconds. Please try again or contact your administrator.</Text>
+            </SectionMessage>
+          )}
+        </Stack>
+      </Box>
 
       {/* Unassigned issues */}
       {!fetching && reportData?.unassignedIssues?.length > 0 && (
@@ -665,15 +943,25 @@ const ManagerApprovalView = ({ months }) => {
 // ---------------------------------------------------------------------------
 // Audit Log view
 // ---------------------------------------------------------------------------
+const MAX_ISSUE_CHIPS = 4;
+
+// "2026-05-14T10:32:00Z" -> "2026-05-14 · 10:32"
+const formatAuditDate = (iso) => {
+  const d = new Date(iso);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd} · ${hh}:${mi}`;
+};
+
 const AuditLogView = ({ months }) => {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [fetching, setFetching] = useState(false);
   const [entries, setEntries] = useState([]);
 
   useEffect(() => {
-    const d = new Date();
-    const currentMonthString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-KUP`;
-    const defaultOption = months.find(o => o.value === currentMonthString) || months[0];
+    const defaultOption = currentMonthDefault(months);
     if (defaultOption) setSelectedMonth(defaultOption);
   }, [months]);
 
@@ -686,35 +974,71 @@ const AuditLogView = ({ months }) => {
       .finally(() => setFetching(false));
   }, [selectedMonth]);
 
+  // Summary strip metrics
+  const approvals = entries.filter(e => e.action === 'approval').length;
+  const unapprovals = entries.length - approvals;
+  const uniqueManagers = new Set(entries.map(e => e.managerName)).size;
+  const uniqueEmployees = new Set(entries.map(e => e.targetUserName)).size;
+
+  const handleExportCsv = () => {
+    const headers = ['Date / Time', 'Manager', 'Action', 'Employee', 'Issue Count', 'Issue Keys'];
+    const csvRows = entries.map(e => [
+      formatAuditDate(e.timestamp),
+      e.managerName,
+      e.action === 'approval' ? 'Approved' : 'Unapproved',
+      e.targetUserName,
+      e.issueCount,
+      (e.issueKeys || []).join(' '),
+    ]);
+    const csvText = [headers, ...csvRows].map(row =>
+      row.map(cell => {
+        const str = String(cell ?? '');
+        return (str.includes(',') || str.includes('"') || str.includes('\n'))
+          ? `"${str.replace(/"/g, '""')}"`
+          : str;
+      }).join(',')
+    ).join('\r\n');
+    // UTF-8 BOM so Excel renders Polish characters correctly
+    const base64 = btoa(unescape(encodeURIComponent('\uFEFF' + csvText)));
+    triggerDownload(base64, `KUP_Audit_${selectedMonth.value}.csv`, 'text/csv;charset=utf-8');
+  };
+
   const head = {
     cells: [
-      { key: 'timestamp', content: 'Date / Time', width: 18 },
-      { key: 'manager', content: 'Manager', width: 18 },
+      { key: 'timestamp', content: 'Date / Time', width: 16 },
+      { key: 'manager', content: 'Manager', width: 16 },
       { key: 'action', content: 'Action', width: 10 },
-      { key: 'employee', content: 'Employee', width: 18 },
-      { key: 'issues', content: 'Issues', width: 36 },
+      { key: 'employee', content: 'Employee', width: 16 },
+      { key: 'issues', content: 'Issues', width: 42 },
     ],
   };
 
   const rows = entries.map((entry, i) => {
-    const date = new Date(entry.timestamp);
-    const dateStr = `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     const actionAppearance = entry.action === 'approval' ? 'success' : 'default';
     const actionLabel = entry.action === 'approval' ? 'Approved' : 'Unapproved';
+    const issueKeys = entry.issueKeys || [];
 
     return {
       key: `audit-${i}`,
       cells: [
-        { key: 'timestamp', content: <Text>{dateStr}</Text> },
-        { key: 'manager', content: <Text>{entry.managerName}</Text> },
+        { key: 'timestamp', content: <Text color="color.text.subtle">{formatAuditDate(entry.timestamp)}</Text> },
+        { key: 'manager', content: <Strong>{entry.managerName}</Strong> },
         { key: 'action', content: <Lozenge appearance={actionAppearance}>{actionLabel}</Lozenge> },
         { key: 'employee', content: <Text>{entry.targetUserName}</Text> },
         {
           key: 'issues',
           content: (
-            <Text>
-              {entry.issueCount} issue{entry.issueCount !== 1 ? 's' : ''}{entry.issueKeys?.length ? `: ${entry.issueKeys.join(', ')}` : ''}
-            </Text>
+            <Inline space="space.100" alignBlock="center" shouldWrap>
+              <Text size="small" weight="bold" color="color.text.subtlest">
+                {entry.issueCount} issue{entry.issueCount !== 1 ? 's' : ''}
+              </Text>
+              {issueKeys.slice(0, MAX_ISSUE_CHIPS).map(k => (
+                <Link key={k} href={`/browse/${k}`} openNewTab={true}>{k}</Link>
+              ))}
+              {issueKeys.length > MAX_ISSUE_CHIPS && (
+                <Text size="small" color="color.text.subtlest">+ {issueKeys.length - MAX_ISSUE_CHIPS} more</Text>
+              )}
+            </Inline>
           ),
         },
       ],
@@ -723,26 +1047,66 @@ const AuditLogView = ({ months }) => {
 
   return (
     <Stack space="space.300">
-      <Box>
-        <Label labelFor="audit-month-select">Month</Label>
-        <Select
-          inputId="audit-month-select"
-          options={months}
-          value={selectedMonth}
-          onChange={setSelectedMonth}
-          isClearable={false}
-          isLoading={fetching}
-        />
-      </Box>
+      {/* Month selector + CSV export */}
+      <Inline spread="space-between" alignBlock="end">
+        <Stack space="space.050">
+          <Label labelFor="audit-month-select">Month</Label>
+          <Select
+            inputId="audit-month-select"
+            options={toMonthOptions(months)}
+            value={selectedMonth ? { label: formatMonthLabel(selectedMonth.value), value: selectedMonth.value } : null}
+            onChange={setSelectedMonth}
+            isClearable={false}
+            isLoading={fetching}
+          />
+        </Stack>
+        <Button onClick={handleExportCsv} isDisabled={fetching || entries.length === 0}>
+          Export CSV
+        </Button>
+      </Inline>
 
       {fetching ? (
         <Spinner size="medium" />
       ) : (
-        <DynamicTable
-          head={head}
-          rows={rows}
-          emptyView="No approval actions recorded for this month."
-        />
+        <Stack space="space.300">
+          {/* Summary strip */}
+          <Inline space="space.200" alignBlock="stretch">
+            <StatCard
+              label="TOTAL ACTIONS"
+              value={entries.length}
+              footer={
+                <Text size="small" color="color.text.subtlest">
+                  {selectedMonth ? formatMonthLabel(selectedMonth.value) : ''}
+                </Text>
+              }
+            />
+            <StatCard
+              label="APPROVALS"
+              value={approvals}
+              footer={<Text size="small" color="color.text.subtlest">hours signed off</Text>}
+            />
+            <StatCard
+              label="UNAPPROVALS"
+              value={unapprovals}
+              footer={<Text size="small" color="color.text.subtlest">reversals</Text>}
+            />
+            <StatCard
+              label="ACTIVE MANAGERS"
+              value={uniqueManagers}
+              footer={
+                <Text size="small" color="color.text.subtlest">
+                  {uniqueEmployees} employee{uniqueEmployees !== 1 ? 's' : ''} affected
+                </Text>
+              }
+            />
+          </Inline>
+
+          <DynamicTable
+            head={head}
+            rows={rows}
+            emptyView="No approval actions recorded for this month."
+          />
+        </Stack>
       )}
     </Stack>
   );
