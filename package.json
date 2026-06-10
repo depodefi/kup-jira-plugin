@@ -12,12 +12,17 @@
     "jest": "^30.3.0"
   },
   "jest": {
-    "testPathIgnorePatterns": ["/node_modules/", "/.claude/"]
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/.claude/"
+    ]
   },
   "dependencies": {
     "@forge/api": "^7.1.1",
+    "@forge/events": "^2.1.2",
     "@forge/kvs": "^1.6.0",
     "@forge/react": "^11.13.1",
-    "@forge/resolver": "1.7.1"
+    "@forge/resolver": "1.7.1",
+    "xlsx": "^0.18.5"
   }
 }

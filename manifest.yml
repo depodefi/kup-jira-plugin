@@ -29,6 +29,10 @@ modules:
       values:
         - path: status
           type: string
+  consumer:
+    - key: payroll-export-queue
+      queue: payroll-export-queue
+      function: exportAsyncHandler
   jira:issueContext:
     - key: kup-compliance-panel
       title: KUP Compliance
@@ -46,6 +50,8 @@ modules:
       handler: index.kupReportHandler
     - key: managerResolver
       handler: index.managerHandler
+    - key: exportAsyncHandler
+      handler: index.exportAsyncHandler
 resources:
   - key: admin-ui
     path: src/admin-ui/index.jsx

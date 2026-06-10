@@ -53,6 +53,7 @@ adminResolver.define('getKupConfig', async () => {
     managerGroups: config?.managerGroups || [],
     maxKupPercent: config?.maxKupPercent ?? null,
     kupLimitEnforcement: config?.kupLimitEnforcement ?? 'warn',
+    exportFieldMappings: config?.exportFieldMappings ?? { employeeId: null, costCenter: null },
   };
 });
 
@@ -63,6 +64,16 @@ adminResolver.define('saveKupConfig', async ({ payload }) => {
     return { success: true };
   }
   return { success: false, error: 'No payload provided' };
+});
+
+// Fetch all custom fields available on the Jira instance (for export field mappings)
+adminResolver.define('getCustomFields', async () => {
+  const res = await api.asApp().requestJira(route`/rest/api/3/field`);
+  const fields = await res.json();
+  return (Array.isArray(fields) ? fields : [])
+    .filter(f => f.custom === true)
+    .map(f => ({ id: f.id, name: f.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 });
 
 // Fetch available Jira groups for the Manager role picker

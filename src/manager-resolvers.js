@@ -1,7 +1,10 @@
 import Resolver from '@forge/resolver';
 import api, { route, storage } from '@forge/api';
 import kvs, { WhereConditions } from '@forge/kvs';
+import { Queue } from '@forge/events';
 import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
+
+const exportQueue = new Queue({ key: 'payroll-export-queue' });
 
 const adjustmentEntity = kvs.entity('user-monthly-adjustment');
 
@@ -662,6 +665,45 @@ managerResolver.define('getApprovalAuditLog', async ({ payload, context }) => {
   const log = await storage.get(logKey) || [];
   // Return in reverse-chronological order
   return { entries: [...log].reverse() };
+});
+
+/**
+ * requestPayrollExport: Queues a background export job and returns immediately.
+ * Manager or admin only. The frontend polls getExportStatus until the file is ready.
+ */
+managerResolver.define('requestPayrollExport', async ({ payload, context }) => {
+  const callerAccountId = context.accountId;
+  const isManager = await checkIsManager(callerAccountId);
+  if (!isManager) return { error: 'Unauthorized' };
+
+  const { month, format } = payload;
+  if (!month || !MONTH_REGEX.test(month)) return { error: 'Invalid month format' };
+  if (!['xlsx', 'csv'].includes(format)) return { error: 'Invalid format — must be xlsx or csv' };
+
+  const { jobId } = await exportQueue.push({ body: { month, format, requestedBy: callerAccountId } });
+  return { jobId, status: 'processing' };
+});
+
+/**
+ * getExportStatus: Polls for a completed export file.
+ * Returns { status: 'processing' } while the background job runs,
+ * { status: 'ready', data, format, filename } when done (and deletes the stored result),
+ * or { status: 'error', message } if the job failed.
+ */
+managerResolver.define('getExportStatus', async ({ payload, context }) => {
+  const { month } = payload;
+  const key = `export_${context.accountId}_${month}`;
+  const result = await storage.get(key);
+
+  if (!result) return { status: 'processing' };
+
+  await storage.delete(key);
+
+  if (result.status === 'error') {
+    return { status: 'error', message: result.message };
+  }
+
+  return { status: 'ready', data: result.data, format: result.format, filename: result.filename };
 });
 
 export const managerHandler = managerResolver.getDefinitions();

@@ -45,6 +45,11 @@ const AdminSettings = () => {
   const [maxKupPercent, setMaxKupPercent] = useState('');
   const [kupLimitEnforcement, setKupLimitEnforcement] = useState({ label: 'Warn only', value: 'warn' });
 
+  // Export field mappings
+  const [customFields, setCustomFields] = useState([]);
+  const [exportEmployeeIdField, setExportEmployeeIdField] = useState(null);
+  const [exportCostCenterField, setExportCostCenterField] = useState(null);
+
   const ENFORCEMENT_OPTIONS = [
     { label: 'Warn only', value: 'warn' },
     { label: 'Block approval', value: 'block' },
@@ -53,15 +58,18 @@ const AdminSettings = () => {
   useEffect(() => {
     async function loadData() {
       try {
-        const [context, config, groups] = await Promise.all([
+        const [context, config, groups, fields] = await Promise.all([
           invoke('getJiraContext'),
           invoke('getKupConfig'),
           invoke('getJiraGroups'),
+          invoke('getCustomFields'),
         ]);
         
         setProjectsData(context.projects.map(p => ({ label: `${p.name} (${p.key})`, value: p.id })));
         setIssueTypesData(context.issueTypes.map(it => ({ label: it.name, value: it.id })));
         setGroupsData((groups || []).map(g => ({ label: g.name, value: g.groupId })));
+        const fieldOptions = (fields || []).map(f => ({ label: `${f.name} (${f.id})`, value: f.id }));
+        setCustomFields(fieldOptions);
 
         if (config) {
           setEnableAll(config.enableAll !== false);
@@ -75,6 +83,9 @@ const AdminSettings = () => {
           setMaxKupPercent(config.maxKupPercent != null ? String(config.maxKupPercent) : '');
           const enforcement = config.kupLimitEnforcement || 'warn';
           setKupLimitEnforcement(ENFORCEMENT_OPTIONS.find(o => o.value === enforcement) || ENFORCEMENT_OPTIONS[0]);
+          // Export field mappings — restored after custom fields are loaded (set in the fieldOptions effect below)
+          setExportEmployeeIdField(config.exportFieldMappings?.employeeId || null);
+          setExportCostCenterField(config.exportFieldMappings?.costCenter || null);
         }
       } catch (err) {
         setErrorMSG('Failed to load configuration: ' + err.message);
@@ -88,7 +99,7 @@ const AdminSettings = () => {
 
   useEffect(() => {
     if (isLoaded.current) setHasUnsavedChanges(true);
-  }, [enableAll, enabledProjects, projectIssueTypes, enabledMonths, monthWorkingHours, managerUsers, managerGroups, maxKupPercent, kupLimitEnforcement]);
+  }, [enableAll, enabledProjects, projectIssueTypes, enabledMonths, monthWorkingHours, managerUsers, managerGroups, maxKupPercent, kupLimitEnforcement, exportEmployeeIdField, exportCostCenterField]);
 
   // Toggle a single month checkbox on/off
   const toggleMonth = (month) => {
@@ -119,6 +130,10 @@ const AdminSettings = () => {
         managerGroups,
         maxKupPercent: !isNaN(parsedMax) && parsedMax > 0 ? parsedMax : null,
         kupLimitEnforcement: kupLimitEnforcement.value,
+        exportFieldMappings: {
+          employeeId: exportEmployeeIdField || null,
+          costCenter: exportCostCenterField || null,
+        },
       });
       setSuccess(true);
       setHasUnsavedChanges(false);
@@ -286,6 +301,36 @@ const AdminSettings = () => {
             </Stack>
           </Box>
         </Inline>
+
+        {/* Export Field Mappings */}
+        <Box paddingBlockStart="space.200">
+          <Heading size="small">Payroll Export Field Mappings</Heading>
+          <Text>Map optional Jira custom fields to payroll export columns. Leave unmapped to omit the column from exports.</Text>
+          <Stack space="space.200">
+            <Box>
+              <Label labelFor="export-employee-id">Map Employee ID to issue field</Label>
+              <Select
+                inputId="export-employee-id"
+                options={customFields}
+                value={customFields.find(f => f.value === exportEmployeeIdField) || null}
+                onChange={opt => setExportEmployeeIdField(opt ? opt.value : null)}
+                isClearable={true}
+                placeholder="Not mapped (column omitted)"
+              />
+            </Box>
+            <Box>
+              <Label labelFor="export-cost-center">Map Cost Center to issue field</Label>
+              <Select
+                inputId="export-cost-center"
+                options={customFields}
+                value={customFields.find(f => f.value === exportCostCenterField) || null}
+                onChange={opt => setExportCostCenterField(opt ? opt.value : null)}
+                isClearable={true}
+                placeholder="Not mapped (column omitted)"
+              />
+            </Box>
+          </Stack>
+        </Box>
 
         {/* Available Months — DynamicTable with per-row toggles */}
         <Box paddingBlockStart="space.200">
