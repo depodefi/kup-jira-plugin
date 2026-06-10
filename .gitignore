@@ -50,3 +50,9 @@ Thumbs.db
 
 
 /.forge/
+
+# Claude Code local settings and worktrees
+.claude/
+
+# Leftover Forge template build output (no longer referenced by manifest)
+/static/
