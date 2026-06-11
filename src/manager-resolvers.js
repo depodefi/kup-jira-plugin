@@ -1,5 +1,5 @@
 import Resolver from '@forge/resolver';
-import api, { route, storage } from '@forge/api';
+import api, { route } from '@forge/api';
 import kvs, { WhereConditions } from '@forge/kvs';
 import { Queue } from '@forge/events';
 import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
@@ -21,7 +21,7 @@ const managerResolver = new Resolver();
  * (either listed as an explicit manager user or is a member of a manager group).
  */
 async function checkIsManager(accountId) {
-  const config = await storage.get('kup_config');
+  const config = await kvs.get('kup_config');
   const managerUsers = config?.managerUsers || [];
   const managerGroups = config?.managerGroups || [];
 
@@ -147,7 +147,7 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
   // Filter to manager's custom team if requested
   if (teamFilter) {
     const teamKey = `kup_manager_team_${callerAccountId}`;
-    const team = await storage.get(teamKey);
+    const team = await kvs.get(teamKey);
     // Members may be stored as { accountId, displayName } objects or plain strings
     const memberIds = new Set((team?.members || []).map(m =>
       typeof m === 'object' ? m.accountId : m
@@ -169,7 +169,7 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
     return { ...user, status };
   });
 
-  const config = await storage.get('kup_config');
+  const config = await kvs.get('kup_config');
   const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
   const maxWorkingHours = workingHoursMap[month] ?? null;
 
@@ -209,7 +209,7 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
   const now = new Date().toISOString();
 
   // KUP limit check
-  const kupConfig = await storage.get('kup_config');
+  const kupConfig = await kvs.get('kup_config');
   const maxKupPercent = kupConfig?.maxKupPercent ?? null;
   const kupLimitEnforcement = kupConfig?.kupLimitEnforcement ?? 'warn';
   if (maxKupPercent) {
@@ -287,7 +287,7 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
   // Append a summary entry to the centralized monthly approval log
   if (approvedCount > 0) {
     const logKey = `kup_approval_log_${month}`;
-    let centralLog = await storage.get(logKey) || [];
+    let centralLog = await kvs.get(logKey) || [];
     centralLog.push({
       action: 'approval',
       managerId: callerAccountId,
@@ -298,7 +298,7 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
       timestamp: now,
     });
     if (centralLog.length > 500) centralLog = centralLog.slice(-500);
-    await storage.set(logKey, centralLog);
+    await kvs.set(logKey, centralLog);
   }
 
   return { success: true, approvedCount, ...(limitWarning ? { warning: limitWarning } : {}) };
@@ -392,7 +392,7 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
   // Append a summary entry to the centralized monthly approval log
   if (unapprovedCount > 0) {
     const logKey = `kup_approval_log_${month}`;
-    let centralLog = await storage.get(logKey) || [];
+    let centralLog = await kvs.get(logKey) || [];
     centralLog.push({
       action: 'unapproval',
       managerId: callerAccountId,
@@ -403,7 +403,7 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
       timestamp: now,
     });
     if (centralLog.length > 500) centralLog = centralLog.slice(-500);
-    await storage.set(logKey, centralLog);
+    await kvs.set(logKey, centralLog);
   }
 
   return { success: true, unapprovedCount };
@@ -442,7 +442,7 @@ managerResolver.define('getMyKupReport', async ({ payload, context }) => {
       return { key: issue.key, summary: issue.fields?.summary || '', hours, approvalStatus };
     });
 
-    const config = await storage.get('kup_config');
+    const config = await kvs.get('kup_config');
     const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
     const maxWorkingHours = workingHoursMap[month] ?? null;
 
@@ -459,7 +459,7 @@ managerResolver.define('getMyKupReport', async ({ payload, context }) => {
  */
 managerResolver.define('getCurrentUserRole', async ({ context }) => {
   const accountId = context.accountId;
-  const config = await storage.get('kup_config');
+  const config = await kvs.get('kup_config');
   const managerUsers = config?.managerUsers || [];
   const managerGroups = config?.managerGroups || [];
 
@@ -478,7 +478,7 @@ managerResolver.define('getCurrentUserRole', async ({ context }) => {
  * getAvailableMonths: Returns the configured list of KUP months for the month picker.
  */
 managerResolver.define('getAvailableMonths', async () => {
-  const config = await storage.get('kup_config');
+  const config = await kvs.get('kup_config');
   let availableMonths = config?.availableMonths;
   if (!availableMonths || availableMonths.length === 0) {
     availableMonths = defaultAvailableMonths();
@@ -501,12 +501,12 @@ managerResolver.define('getJiraGroups', async ({ context }) => {
 });
 
 /**
- * getManagerTeam: Returns the current manager's custom team from storage.
+ * getManagerTeam: Returns the current manager's custom team from kvs.
  * Members are stored as an array of accountId strings.
  */
 managerResolver.define('getManagerTeam', async ({ context }) => {
   const accountId = context.accountId;
-  const team = await storage.get(`kup_manager_team_${accountId}`);
+  const team = await kvs.get(`kup_manager_team_${accountId}`);
   return { members: team?.members || [] };
 });
 
@@ -536,7 +536,7 @@ managerResolver.define('saveManagerTeam', async ({ payload, context }) => {
     sanitized.push({ accountId: memberId, displayName });
   }
 
-  await storage.set(`kup_manager_team_${accountId}`, { members: sanitized });
+  await kvs.set(`kup_manager_team_${accountId}`, { members: sanitized });
   return { success: true };
 });
 
@@ -593,7 +593,7 @@ managerResolver.define('saveMyAdjustment', async ({ payload, context }) => {
     }
   }
 
-  const config = await storage.get('kup_config');
+  const config = await kvs.get('kup_config');
   const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
   const maxWorkingHours = workingHoursMap[month];
   if (maxWorkingHours != null && absenceHours > maxWorkingHours) {
@@ -662,7 +662,7 @@ managerResolver.define('getApprovalAuditLog', async ({ payload, context }) => {
   if (!month || !MONTH_REGEX.test(month)) return { entries: [] };
 
   const logKey = `kup_approval_log_${month}`;
-  const log = await storage.get(logKey) || [];
+  const log = await kvs.get(logKey) || [];
 
   // Resolve manager/employee display names live — only account IDs are
   // persisted (#19). Falls back to any legacy persisted name, then "Former user".
@@ -702,11 +702,11 @@ managerResolver.define('requestPayrollExport', async ({ payload, context }) => {
 managerResolver.define('getExportStatus', async ({ payload, context }) => {
   const { month } = payload;
   const key = `export_${context.accountId}_${month}`;
-  const result = await storage.get(key);
+  const result = await kvs.get(key);
 
   if (!result) return { status: 'processing' };
 
-  await storage.delete(key);
+  await kvs.delete(key);
 
   if (result.status === 'error') {
     return { status: 'error', message: result.message };

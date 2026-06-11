@@ -1,17 +1,20 @@
 import { adminHandler } from './admin-resolvers';
-import api, { storage } from '@forge/api';
+import api from '@forge/api';
+import kvs from '@forge/kvs';
 
-jest.mock('@forge/api', () => {
-  return {
-    route: (strings, ...values) => strings[0] + values.join(''),
-    storage: {
-      get: jest.fn(),
-      set: jest.fn()
-    },
-    asApp: jest.fn().mockReturnThis(),
-    requestJira: jest.fn()
-  };
-});
+jest.mock('@forge/api', () => ({
+  route: (strings, ...values) => strings[0] + values.join(''),
+  asApp: jest.fn().mockReturnThis(),
+  requestJira: jest.fn()
+}));
+
+jest.mock('@forge/kvs', () => ({
+  __esModule: true,
+  default: { get: jest.fn(), set: jest.fn(), delete: jest.fn() },
+}));
+
+// Config now lives in @forge/kvs; existing tests reference it as `storage`.
+const storage = kvs;
 
 describe('adminResolver', () => {
   beforeEach(() => {

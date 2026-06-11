@@ -1,5 +1,6 @@
 import Resolver from '@forge/resolver';
-import api, { route, storage } from '@forge/api';
+import api, { route } from '@forge/api';
+import kvs from '@forge/kvs';
 import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
@@ -118,7 +119,7 @@ adminResolver.define('getJiraContext', async () => {
 
 // Get currently saved KUP configuration
 adminResolver.define('getKupConfig', async () => {
-  const config = await storage.get('kup_config');
+  const config = await kvs.get('kup_config');
   
   // If undefined or empty (first install/never configured), default to the current year
   let availableMonths = config?.availableMonths;
@@ -129,7 +130,7 @@ adminResolver.define('getKupConfig', async () => {
   let monthWorkingHours = config?.monthWorkingHours;
   if (!monthWorkingHours) {
     monthWorkingHours = DEFAULT_WORKING_HOURS;
-    await storage.set('kup_config', { ...(config || {}), monthWorkingHours });
+    await kvs.set('kup_config', { ...(config || {}), monthWorkingHours });
   }
 
   return {
@@ -151,7 +152,7 @@ adminResolver.define('saveKupConfig', async ({ payload }) => {
   const validationError = validateKupConfig(payload);
   if (validationError) return { success: false, error: validationError };
 
-  await storage.set('kup_config', payload);
+  await kvs.set('kup_config', payload);
   return { success: true };
 });
 
@@ -175,7 +176,7 @@ adminResolver.define('getJiraGroups', async () => {
 // Evaluate whether the current user holds the KUP Manager role
 adminResolver.define('getCurrentUserRole', async ({ context }) => {
   const accountId = context.accountId;
-  const config = await storage.get('kup_config');
+  const config = await kvs.get('kup_config');
   const managerUsers = config?.managerUsers || [];
   const managerGroups = config?.managerGroups || [];
 

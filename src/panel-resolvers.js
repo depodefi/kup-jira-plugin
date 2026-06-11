@@ -1,5 +1,6 @@
 import Resolver from '@forge/resolver';
-import api, { route, storage } from '@forge/api';
+import api, { route } from '@forge/api';
+import kvs from '@forge/kvs';
 import { defaultAvailableMonths } from './kup-defaults.js';
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
@@ -53,7 +54,7 @@ panelResolver.define('getPanelData', async ({ context }) => {
 
   // Fetch config and issue properties all at once — no sequential dependency
   const [config, kupDataRes, approvalRes] = await Promise.all([
-    storage.get('kup_config'),
+    kvs.get('kup_config'),
     api.asApp().requestJira(route`/rest/api/3/issue/${issueId}/properties/kup-data`).catch(() => null),
     api.asApp().requestJira(route`/rest/api/3/issue/${issueId}/properties/kup-approval`).catch(() => null),
   ]);

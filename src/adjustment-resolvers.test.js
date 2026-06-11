@@ -1,10 +1,9 @@
 import { managerHandler } from './manager-resolvers';
-import api, { storage } from '@forge/api';
+import api from '@forge/api';
 import kvs from '@forge/kvs';
 
 jest.mock('@forge/api', () => ({
   route: (strings, ...values) => strings.reduce((acc, str, i) => acc + str + (values[i] ?? ''), ''),
-  storage: { get: jest.fn(), set: jest.fn() },
   asApp: jest.fn().mockReturnThis(),
   requestJira: jest.fn(),
 }));
@@ -18,13 +17,14 @@ jest.mock('@forge/kvs', () => {
   };
   return {
     __esModule: true,
-    default: { entity: jest.fn(() => entity) },
+    default: { get: jest.fn(), set: jest.fn(), delete: jest.fn(), entity: jest.fn(() => entity) },
     WhereConditions: { equalTo: jest.fn(val => val) },
     _mockEntity: entity,
   };
 });
 
 const { _mockEntity: mockEntity } = require('@forge/kvs');
+const storage = kvs;
 
 function invoke(functionKey, payload = {}, accountId = 'user-001') {
   return managerHandler(

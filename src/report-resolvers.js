@@ -1,6 +1,6 @@
 import Resolver from '@forge/resolver';
-import { storage } from '@forge/api';
 import api, { route } from '@forge/api';
+import kvs from '@forge/kvs';
 import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
@@ -9,7 +9,7 @@ const kupReportResolver = new Resolver();
 
 // 1. Get available months config for the dropdown
 kupReportResolver.define('getAvailableMonths', async () => {
-  const config = await storage.get('kup_config');
+  const config = await kvs.get('kup_config');
   let availableMonths = config?.availableMonths;
   if (!availableMonths || availableMonths.length === 0) {
     availableMonths = defaultAvailableMonths();
@@ -58,7 +58,7 @@ kupReportResolver.define('getMyKupReport', async ({ payload, context }) => {
       };
     });
 
-    const config = await storage.get('kup_config');
+    const config = await kvs.get('kup_config');
     const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
     const maxWorkingHours = workingHoursMap[month] ?? null;
 

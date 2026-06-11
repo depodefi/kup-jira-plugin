@@ -1,4 +1,4 @@
-import api, { route, storage } from '@forge/api';
+import api, { route } from '@forge/api';
 import kvs, { WhereConditions } from '@forge/kvs';
 import * as XLSX from 'xlsx';
 import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
@@ -79,7 +79,7 @@ export async function exportAsyncHandler(event) {
 
   try {
     // 1. Load config
-    const config = await storage.get('kup_config') ?? {};
+    const config = await kvs.get('kup_config') ?? {};
     const workingHoursMap = config.monthWorkingHours || DEFAULT_WORKING_HOURS;
     const baseWorkingHours = workingHoursMap[month] ?? 160;
     const exportFieldMappings = config.exportFieldMappings || {};
@@ -215,20 +215,20 @@ export async function exportAsyncHandler(event) {
       : generateCsv(outputRows, enableKupLimit, exportFieldMappings);
 
     // 8. Store result — frontend will poll for it; 1-hour TTL cleans up unclaimed exports
-    await storage.set(storageKey, {
+    await kvs.set(storageKey, {
       data: fileBase64,
       format,
       filename,
       createdAt: new Date().toISOString(),
-    }, { ttl: 3600 });
+    }, { ttl: { value: 1, unit: 'HOURS' } });
 
   } catch (err) {
     console.error('[exportAsyncHandler] Export failed:', err);
     // Store error so the frontend can surface it instead of timing out
-    await storage.set(storageKey, {
+    await kvs.set(storageKey, {
       status: 'error',
       message: err.message || 'Export failed unexpectedly',
       createdAt: new Date().toISOString(),
-    }, { ttl: 3600 });
+    }, { ttl: { value: 1, unit: 'HOURS' } });
   }
 }

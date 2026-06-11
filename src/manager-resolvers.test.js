@@ -1,17 +1,24 @@
 import { managerHandler } from './manager-resolvers';
-import api, { storage } from '@forge/api';
+import api from '@forge/api';
+import kvs from '@forge/kvs';
 
-jest.mock('@forge/api', () => {
+jest.mock('@forge/api', () => ({
+  route: (strings, ...values) => strings.reduce((acc, str, i) => acc + str + (values[i] ?? ''), ''),
+  asApp: jest.fn().mockReturnThis(),
+  requestJira: jest.fn(),
+}));
+
+jest.mock('@forge/kvs', () => {
+  const entity = { get: jest.fn(), set: jest.fn(), delete: jest.fn(), query: jest.fn() };
   return {
-    route: (strings, ...values) => strings.reduce((acc, str, i) => acc + str + (values[i] ?? ''), ''),
-    storage: {
-      get: jest.fn(),
-      set: jest.fn(),
-    },
-    asApp: jest.fn().mockReturnThis(),
-    requestJira: jest.fn(),
+    __esModule: true,
+    default: { get: jest.fn(), set: jest.fn(), delete: jest.fn(), entity: jest.fn(() => entity) },
+    WhereConditions: { equalTo: jest.fn(v => v) },
   };
 });
+
+// Config and approval logs now live in @forge/kvs; existing tests reference it as `storage`.
+const storage = kvs;
 
 // Helper to invoke a resolver function via the handler.
 // The Forge Resolver reads payload from call.payload and accountId from
