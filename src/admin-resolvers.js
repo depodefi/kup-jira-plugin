@@ -1,6 +1,6 @@
 import Resolver from '@forge/resolver';
 import api, { route, storage } from '@forge/api';
-import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
+import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
 const ACCOUNT_ID_REGEX = /^[a-zA-Z0-9:-]{1,128}$/;
@@ -120,13 +120,10 @@ adminResolver.define('getJiraContext', async () => {
 adminResolver.define('getKupConfig', async () => {
   const config = await storage.get('kup_config');
   
+  // If undefined or empty (first install/never configured), default to the current year
   let availableMonths = config?.availableMonths;
-  // If undefined or empty (first install/never configured), default to all of 2026
   if (!availableMonths || availableMonths.length === 0) {
-    availableMonths = [];
-    for (let m = 1; m <= 12; m++) {
-      availableMonths.push(`2026-${String(m).padStart(2, '0')}-KUP`);
-    }
+    availableMonths = defaultAvailableMonths();
   }
 
   let monthWorkingHours = config?.monthWorkingHours;

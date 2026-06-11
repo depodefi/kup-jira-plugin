@@ -1,7 +1,27 @@
 import Resolver from '@forge/resolver';
 import api, { route, storage } from '@forge/api';
+import { defaultAvailableMonths } from './kup-defaults.js';
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
+const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/**
+ * Derive the app's UUID at runtime so the global-page deep link is correct
+ * regardless of which registration is serving the request — development,
+ * staging, and Marketplace production each get a distinct app id.
+ *
+ * `localId` is the module ARI, e.g.
+ *   ari:cloud:ecosystem::extension/{appId}/{environmentId}/{module}
+ * whose first UUID segment is the app id. Returns null when it can't be
+ * determined, in which case the panel simply hides the link.
+ */
+function resolveAppId(context) {
+  const fromAppId = typeof context?.appId === 'string' && context.appId.match(UUID_REGEX);
+  if (fromAppId) return fromAppId[0];
+  const fromLocalId = typeof context?.localId === 'string' && context.localId.match(UUID_REGEX);
+  if (fromLocalId) return fromLocalId[0];
+  return null;
+}
 
 const panelResolver = new Resolver();
 
@@ -45,18 +65,15 @@ panelResolver.define('getPanelData', async ({ context }) => {
 
   let availableMonths = config?.availableMonths;
   if (!availableMonths || availableMonths.length === 0) {
-    availableMonths = [];
-    for (let m = 1; m <= 12; m++) {
-      availableMonths.push(`2026-${String(m).padStart(2, '0')}-KUP`);
-    }
+    availableMonths = defaultAvailableMonths();
   }
 
   const kupData = kupDataRes?.ok ? (await kupDataRes.json()).value || null : null;
   const approval = approvalRes?.ok ? (await approvalRes.json()).value || null : null;
 
-  const APP_UUID = 'a8161fad-fc13-466f-aa28-6f264f00b396';
+  const appId = resolveAppId(context);
   const envId = context.environmentId;
-  const globalPagePath = envId ? `/jira/apps/${APP_UUID}/${envId}` : null;
+  const globalPagePath = appId && envId ? `/jira/apps/${appId}/${envId}` : null;
 
   return { eligible: true, kupData, availableMonths, approval, globalPagePath };
 });

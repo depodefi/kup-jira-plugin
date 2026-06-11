@@ -12,3 +12,16 @@ export const DEFAULT_WORKING_HOURS = {
   "2030-01-KUP":176,"2030-02-KUP":160,"2030-03-KUP":168,"2030-04-KUP":168,"2030-05-KUP":168,"2030-06-KUP":152,
   "2030-07-KUP":184,"2030-08-KUP":168,"2030-09-KUP":168,"2030-10-KUP":184,"2030-11-KUP":152,"2030-12-KUP":160,
 };
+
+/**
+ * Month options shown before an admin configures `availableMonths`.
+ * Defaults to all 12 months of the current calendar year so a fresh (or
+ * never-configured) install never offers a stale year.
+ */
+export function defaultAvailableMonths(year = new Date().getFullYear()) {
+  const months = [];
+  for (let m = 1; m <= 12; m++) {
+    months.push(`${year}-${String(m).padStart(2, '0')}-KUP`);
+  }
+  return months;
+}

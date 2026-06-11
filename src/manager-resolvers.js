@@ -2,7 +2,7 @@ import Resolver from '@forge/resolver';
 import api, { route, storage } from '@forge/api';
 import kvs, { WhereConditions } from '@forge/kvs';
 import { Queue } from '@forge/events';
-import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
+import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
 import { resolveUserNames } from './user-names.js';
 
 const exportQueue = new Queue({ key: 'payroll-export-queue' });
@@ -481,10 +481,7 @@ managerResolver.define('getAvailableMonths', async () => {
   const config = await storage.get('kup_config');
   let availableMonths = config?.availableMonths;
   if (!availableMonths || availableMonths.length === 0) {
-    availableMonths = [];
-    for (let m = 1; m <= 12; m++) {
-      availableMonths.push(`2026-${String(m).padStart(2, '0')}-KUP`);
-    }
+    availableMonths = defaultAvailableMonths();
   }
   return availableMonths;
 });

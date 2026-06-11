@@ -1,7 +1,7 @@
 import Resolver from '@forge/resolver';
 import { storage } from '@forge/api';
 import api, { route } from '@forge/api';
-import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
+import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
 
@@ -11,12 +11,8 @@ const kupReportResolver = new Resolver();
 kupReportResolver.define('getAvailableMonths', async () => {
   const config = await storage.get('kup_config');
   let availableMonths = config?.availableMonths;
-  
   if (!availableMonths || availableMonths.length === 0) {
-    availableMonths = [];
-    for (let m = 1; m <= 12; m++) {
-      availableMonths.push(`2026-${String(m).padStart(2, '0')}-KUP`);
-    }
+    availableMonths = defaultAvailableMonths();
   }
   return availableMonths;
 });
