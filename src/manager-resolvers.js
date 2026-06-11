@@ -3,6 +3,7 @@ import api, { route, storage } from '@forge/api';
 import kvs, { WhereConditions } from '@forge/kvs';
 import { Queue } from '@forge/events';
 import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
+import { resolveUserNames } from './user-names.js';
 
 const exportQueue = new Queue({ key: 'payroll-export-queue' });
 
@@ -192,24 +193,12 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
     return { success: false, error: 'Invalid account ID' };
   }
 
-  // Fetch manager's display name for audit entries
-  let callerName = 'Unknown Manager';
-  try {
-    const userRes = await api.asApp().requestJira(route`/rest/api/3/user?accountId=${callerAccountId}`);
-    if (userRes.ok) {
-      const userObj = await userRes.json();
-      callerName = userObj.displayName || callerName;
-    }
-  } catch (e) {
-    console.warn('Could not fetch manager display name', e);
-  }
-
-  // Find all issues for the target user + month (include assignee for display name)
+  // Find all issues for the target user + month
   const jql = `assignee = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
   const res = await api.asApp().requestJira(route`/rest/api/3/search/jql`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jql, fields: ['summary', 'assignee'], properties: ['kup-approval'], maxResults: 100 }),
+    body: JSON.stringify({ jql, fields: ['summary'], properties: ['kup-data', 'kup-approval'], maxResults: 100 }),
   });
 
   if (!res.ok) return { success: false, error: 'Failed to search issues' };
@@ -218,7 +207,6 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
   let approvedCount = 0;
   const approvedKeys = [];
   const now = new Date().toISOString();
-  const targetUserName = data.issues[0]?.fields?.assignee?.displayName || accountId;
 
   // KUP limit check
   const kupConfig = await storage.get('kup_config');
@@ -256,7 +244,6 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
         body: JSON.stringify({
           status: 'approved',
           approvedBy: callerAccountId,
-          approvedByName: callerName,
           approvedAt: now,
         }),
       }
@@ -278,7 +265,6 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
 
     auditLog.push({
       userId: callerAccountId,
-      userName: callerName,
       timestamp: now,
       action: 'approval',
       changes: { status: { from: 'pending', to: 'approved' } },
@@ -305,9 +291,7 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
     centralLog.push({
       action: 'approval',
       managerId: callerAccountId,
-      managerName: callerName,
       targetUserId: accountId,
-      targetUserName,
       month,
       issueCount: approvedCount,
       issueKeys: approvedKeys,
@@ -337,23 +321,11 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
     return { success: false, error: 'Invalid account ID' };
   }
 
-  // Fetch manager's display name for audit entries
-  let callerName = 'Unknown Manager';
-  try {
-    const userRes = await api.asApp().requestJira(route`/rest/api/3/user?accountId=${callerAccountId}`);
-    if (userRes.ok) {
-      const userObj = await userRes.json();
-      callerName = userObj.displayName || callerName;
-    }
-  } catch (e) {
-    console.warn('Could not fetch manager display name', e);
-  }
-
   const jql = `assignee = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
   const res = await api.asApp().requestJira(route`/rest/api/3/search/jql`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jql, fields: ['summary', 'assignee'], properties: ['kup-approval'], maxResults: 100 }),
+    body: JSON.stringify({ jql, fields: ['summary'], properties: ['kup-approval'], maxResults: 100 }),
   });
 
   if (!res.ok) return { success: false, error: 'Failed to search issues' };
@@ -362,7 +334,6 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
   let unapprovedCount = 0;
   const unapprovedKeys = [];
   const now = new Date().toISOString();
-  const targetUserName = data.issues[0]?.fields?.assignee?.displayName || accountId;
 
   for (const issue of data.issues) {
     const props = issue.properties || {};
@@ -378,7 +349,6 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
         body: JSON.stringify({
           status: 'pending',
           approvedBy: null,
-          approvedByName: null,
           approvedAt: null,
         }),
       }
@@ -400,7 +370,6 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
 
     auditLog.push({
       userId: callerAccountId,
-      userName: callerName,
       timestamp: now,
       action: 'unapproval',
       changes: { status: { from: 'approved', to: 'pending' } },
@@ -427,9 +396,7 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
     centralLog.push({
       action: 'unapproval',
       managerId: callerAccountId,
-      managerName: callerName,
       targetUserId: accountId,
-      targetUserName,
       month,
       issueCount: unapprovedCount,
       issueKeys: unapprovedKeys,
@@ -699,8 +666,17 @@ managerResolver.define('getApprovalAuditLog', async ({ payload, context }) => {
 
   const logKey = `kup_approval_log_${month}`;
   const log = await storage.get(logKey) || [];
-  // Return in reverse-chronological order
-  return { entries: [...log].reverse() };
+
+  // Resolve manager/employee display names live — only account IDs are
+  // persisted (#19). Falls back to any legacy persisted name, then "Former user".
+  const names = await resolveUserNames(log.flatMap(e => [e.managerId, e.targetUserId]));
+  const entries = [...log].reverse().map(e => ({
+    ...e,
+    managerName: names.get(e.managerId) || e.managerName || 'Former user',
+    targetUserName: names.get(e.targetUserId) || e.targetUserName || 'Former user',
+  }));
+
+  return { entries };
 });
 
 /**

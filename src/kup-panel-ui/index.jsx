@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
   Text, Select, Textfield, Button, Box, Stack, Inline, Heading, SectionMessage,
-  Label, Spinner, Strong, Em, Lozenge
+  Label, Spinner, Strong, Em, Lozenge, User
 } from '@forge/react';
 import { invoke, router } from '@forge/bridge';
 
@@ -143,7 +143,13 @@ const KupPanel = () => {
         {/* Approval banner */}
         {isApproved && (
           <SectionMessage appearance="confirmation">
-            <Text>Approved by <Strong>{approval.approvedByName}</Strong> on {approvedAtFormatted}</Text>
+            <Inline space="space.050" alignBlock="center">
+              <Text>Approved by</Text>
+              {approval.approvedBy
+                ? <User accountId={approval.approvedBy} />
+                : <Strong>{approval.approvedByName || 'a manager'}</Strong>}
+              <Text>on {approvedAtFormatted}</Text>
+            </Inline>
           </SectionMessage>
         )}
 
@@ -227,14 +233,16 @@ const KupPanel = () => {
                 const changeDescs = Object.entries(entry.changes).map(
                   ([field, diff]) => `${field}: ${diff.from || '—'} → ${diff.to || '—'}`
                 );
-                const displayName = entry.userName || entry.userId;
-                const emailDisplay = entry.userEmail ? ` (${entry.userEmail})` : '';
-                const userDisplay = `${displayName}${emailDisplay}`;
 
                 return (
                   <Box key={idx} padding="space.100">
                     <Stack space="space.050">
-                      <Text><Em>{dateStr}</Em> — <Strong>{userDisplay}</Strong></Text>
+                      <Inline space="space.050" alignBlock="center">
+                        <Text><Em>{dateStr}</Em> —</Text>
+                        {entry.userId
+                          ? <User accountId={entry.userId} />
+                          : <Strong>{entry.userName || 'Unknown user'}</Strong>}
+                      </Inline>
                       {changeDescs.map((desc, i) => (
                         <Text key={i}>  • {desc}</Text>
                       ))}

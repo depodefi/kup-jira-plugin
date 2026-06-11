@@ -151,32 +151,12 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
       return { success: false, error: `Failed to save KUP data: ${errText}` };
     }
 
-    // 4. Build the audit entry using the authenticated user's account ID
+    // 4. Build the audit entry. Store only the account ID — display names and
+    //    emails are resolved live at render time, never persisted (#19).
     const accountId = context.accountId || 'unknown';
-    let userName = 'Unknown User';
-    let userEmail = '';
-
-    if (accountId !== 'unknown') {
-      try {
-        // Fetch using the App credentials (asApp) to bypass requiring individual users
-        // to click "Allow access" on Forge consent screens.
-        const userRes = await api.asApp().requestJira(route`/rest/api/3/user?accountId=${accountId}`);
-        if (userRes.ok) {
-          const userObj = await userRes.json();
-          userName = userObj.displayName || userName;
-          userEmail = userObj.emailAddress || '';
-        } else {
-          console.warn('Jira API rejected user fetch via asApp:', userRes.status, await userRes.text());
-        }
-      } catch (e) {
-        console.warn('Could not fetch user details', e);
-      }
-    }
 
     const auditEntry = {
       userId: accountId,
-      userName: userName,
-      userEmail: userEmail,
       timestamp: new Date().toISOString(),
       changes: {},
     };

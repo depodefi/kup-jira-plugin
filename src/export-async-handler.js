@@ -2,6 +2,7 @@ import api, { route, storage } from '@forge/api';
 import kvs, { WhereConditions } from '@forge/kvs';
 import * as XLSX from 'xlsx';
 import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
+import { resolveUserNames } from './user-names.js';
 
 const adjustmentEntity = kvs.entity('user-monthly-adjustment');
 
@@ -155,16 +156,22 @@ export async function exportAsyncHandler(event) {
             : undefined,
           creativeHours: 0,
           approvalStatuses: [],
-          approverName: '',
+          approverId: null,
         };
       }
 
       employeeMap[accountId].creativeHours += hours;
       employeeMap[accountId].approvalStatuses.push(kupApproval.status || 'pending');
-      if (kupApproval.approvedByName) {
-        employeeMap[accountId].approverName = kupApproval.approvedByName;
+      if (kupApproval.approvedBy) {
+        employeeMap[accountId].approverId = kupApproval.approvedBy;
       }
     }
+
+    // Resolve approver account IDs to display names live — names are never
+    // persisted on the approval property (#19).
+    const approverNames = await resolveUserNames(
+      Object.values(employeeMap).map(e => e.approverId)
+    );
 
     // 6. Compute final per-employee output rows
     const outputRows = Object.values(employeeMap).map(emp => {
@@ -189,7 +196,7 @@ export async function exportAsyncHandler(event) {
         lastName: emp.lastName,
         employeeId: emp.employeeId,
         costCenter: emp.costCenter,
-        approver: emp.approverName,
+        approver: emp.approverId ? (approverNames.get(emp.approverId) || 'Former user') : '',
         workingHours,
         creativeHours: emp.creativeHours,
         cappedCreativeHours,

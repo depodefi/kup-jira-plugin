@@ -161,10 +161,9 @@ describe('managerResolver', () => {
     // checkIsManager
     storage.get.mockResolvedValueOnce(managerConfig);
 
-    // Fetch manager display name
+    // JQL search for target user's issues (manager name is no longer fetched —
+    // only the account ID is persisted, names are resolved live at render time)
     api.requestJira
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ displayName: 'Manager Mike' }) })
-      // JQL search for target user's issues
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -196,7 +195,7 @@ describe('managerResolver', () => {
     const body = JSON.parse(approvalCall[1].body);
     expect(body.status).toBe('approved');
     expect(body.approvedBy).toBe('manager-001');
-    expect(body.approvedByName).toBe('Manager Mike');
+    expect(body.approvedByName).toBeUndefined(); // names are no longer persisted (#19)
     expect(body.approvedAt).toBeDefined();
 
     // Verify audit log was written for PROJ-10
@@ -213,7 +212,6 @@ describe('managerResolver', () => {
     storage.get.mockResolvedValueOnce(managerConfig);
 
     api.requestJira
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ displayName: 'Manager Mike' }) })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -226,8 +224,8 @@ describe('managerResolver', () => {
 
     const result = await invoke('bulkApprove', { accountId: 'dev-001', month: '2026-03-KUP' });
     expect(result).toEqual({ success: true, approvedCount: 0 });
-    // Only 2 requestJira calls: user fetch + JQL search (no writes)
-    expect(api.requestJira).toHaveBeenCalledTimes(2);
+    // Only the JQL search runs — no writes, and no manager-name fetch
+    expect(api.requestJira).toHaveBeenCalledTimes(1);
   });
 
   // --- bulkUnapprove ---
@@ -236,7 +234,6 @@ describe('managerResolver', () => {
     storage.get.mockResolvedValueOnce(managerConfig);
 
     api.requestJira
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ displayName: 'Manager Mike' }) })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -259,7 +256,7 @@ describe('managerResolver', () => {
     const body = JSON.parse(approvalCall[1].body);
     expect(body.status).toBe('pending');
     expect(body.approvedBy).toBeNull();
-    expect(body.approvedByName).toBeNull();
+    expect(body.approvedByName).toBeUndefined(); // names are no longer persisted (#19)
     expect(body.approvedAt).toBeNull();
 
     const auditCall = api.requestJira.mock.calls.find(
@@ -274,7 +271,6 @@ describe('managerResolver', () => {
     storage.get.mockResolvedValueOnce(managerConfig);
 
     api.requestJira
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ displayName: 'Manager Mike' }) })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -287,7 +283,7 @@ describe('managerResolver', () => {
 
     const result = await invoke('bulkUnapprove', { accountId: 'dev-001', month: '2026-03-KUP' });
     expect(result).toEqual({ success: true, unapprovedCount: 0 });
-    expect(api.requestJira).toHaveBeenCalledTimes(2);
+    expect(api.requestJira).toHaveBeenCalledTimes(1);
   });
 
   // --- accountId JQL-injection hardening (#18) ---
@@ -331,7 +327,6 @@ describe('managerResolver', () => {
     storage.get.mockResolvedValueOnce(managerConfig);
 
     api.requestJira
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ displayName: 'Manager Mike' }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ total: 0, issues: [] }) });
 
     const result = await invoke('bulkApprove', { accountId: '557058:f58131cb-b67d-43c7-b30d-6b58d40bd077', month: '2026-03-KUP' });
@@ -358,6 +353,48 @@ describe('managerResolver', () => {
 
     const result = await invoke('getJiraGroups');
     expect(result).toEqual([{ groupId: 'g-1', name: 'developers' }]);
+  });
+
+  // --- getApprovalAuditLog: live name resolution (#19) ---
+
+  it('getApprovalAuditLog resolves manager/employee names live from account IDs', async () => {
+    storage.get
+      .mockResolvedValueOnce(managerConfig) // checkIsManager
+      .mockResolvedValueOnce([              // central approval log — IDs only, no persisted names
+        { action: 'approval', managerId: 'mgr-1', targetUserId: 'emp-1', month: '2026-03-KUP', issueCount: 2, issueKeys: ['P-1', 'P-2'], timestamp: '2026-03-10T09:00:00Z' },
+      ]);
+
+    // resolveUserNames issues one /user lookup per unique account ID
+    api.requestJira.mockImplementation((url) => {
+      if (url.includes('mgr-1')) return Promise.resolve({ ok: true, json: async () => ({ displayName: 'Manager Mike' }) });
+      if (url.includes('emp-1')) return Promise.resolve({ ok: true, json: async () => ({ displayName: 'Alice Chen' }) });
+      return Promise.resolve({ ok: false });
+    });
+
+    const result = await invoke('getApprovalAuditLog', { month: '2026-03-KUP' });
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0].managerName).toBe('Manager Mike');
+    expect(result.entries[0].targetUserName).toBe('Alice Chen');
+    // The persisted record carries no names — only the stable account IDs
+    expect(result.entries[0].managerId).toBe('mgr-1');
+    expect(result.entries[0].targetUserId).toBe('emp-1');
+  });
+
+  it('getApprovalAuditLog falls back to "Former user" for deleted accounts', async () => {
+    storage.get
+      .mockResolvedValueOnce(managerConfig)
+      .mockResolvedValueOnce([
+        { action: 'unapproval', managerId: 'mgr-1', targetUserId: 'gone-1', month: '2026-03-KUP', issueCount: 1, issueKeys: ['P-9'], timestamp: '2026-03-11T09:00:00Z' },
+      ]);
+
+    api.requestJira.mockImplementation((url) => {
+      if (url.includes('mgr-1')) return Promise.resolve({ ok: true, json: async () => ({ displayName: 'Manager Mike' }) });
+      return Promise.resolve({ ok: false }); // gone-1 no longer exists
+    });
+
+    const result = await invoke('getApprovalAuditLog', { month: '2026-03-KUP' });
+    expect(result.entries[0].targetUserName).toBe('Former user');
   });
 
   // --- saveManagerTeam validation ---
