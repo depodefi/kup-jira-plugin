@@ -58,6 +58,8 @@ This is an **Atlassian Forge** app for KUP (Knowledge Update Profile) 50% compli
 - Per-issue audit trail → Issue Entity Properties (`kup-audit-log`)
 - The `jira:entityProperty` module indexes `kupMonth` (string) and `kupHours` (number) for JQL querying
 
+> by the way — the audit logs are capped to stay under Forge's 240 KiB value limit: the per-issue `kup-audit-log` keeps the most recent 50 entries, and the central `kup_approval_log_{month}` keeps the most recent 500 per month. once a cap is hit the oldest entries are dropped (not archived), so the trail is a recent-history window, not a permanent record. fine for day-to-day use; if a customer ever needs unbounded retention we'd archive overflow to a separate key or export it out of Forge.
+
 **Authorization:** Use `.asApp()` for resolver-side Jira REST API calls (avoids individual user consent). The `read:jira-user` scope is required for fetching usernames in audit log entries.
 
 **Tunnelling:** When using `forge tunnel`, do NOT redeploy on code-only changes (hot reload). Redeploy only when `manifest.yml` changes, then restart the tunnel.
