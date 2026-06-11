@@ -1148,7 +1148,8 @@ const KupGlobalPage = () => {
   return (
     <Box padding="space.400">
       <Stack space="space.400">
-        <Heading size="large">KUP Compliance</Heading>
+        {/* Page title comes from the global-page module title in manifest.yml —
+            no in-app Heading, to avoid a duplicate "KUP Compliance" header. */}
 
         {/* Tab bar — only shown to managers */}
         {isManager && (
