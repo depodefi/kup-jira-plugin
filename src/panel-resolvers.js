@@ -148,7 +148,8 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
     );
     if (!saveRes.ok) {
       const errText = await saveRes.text();
-      return { success: false, error: `Failed to save KUP data: ${errText}` };
+      console.error('Failed to save KUP data:', saveRes.status, errText);
+      return { success: false, error: 'Failed to save KUP data. Please try again.' };
     }
 
     // 4. Build the audit entry. Store only the account ID — display names and
@@ -218,7 +219,7 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
     return { success: true, kupData: newData, auditLog };
   } catch (err) {
     console.error('Error saving KUP data:', err);
-    return { success: false, error: err.message };
+    return { success: false, error: 'An unexpected error occurred while saving. Please try again.' };
   }
 });
 
