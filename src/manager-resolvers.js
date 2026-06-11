@@ -186,6 +186,11 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
   const { accountId, month } = payload;
 
   if (!month || !MONTH_REGEX.test(month)) return { success: false, error: 'Invalid month format' };
+  // accountId is interpolated into JQL below — reject anything that isn't a
+  // plain Atlassian account ID to rule out JQL injection.
+  if (typeof accountId !== 'string' || !ACCOUNT_ID_REGEX.test(accountId)) {
+    return { success: false, error: 'Invalid account ID' };
+  }
 
   // Fetch manager's display name for audit entries
   let callerName = 'Unknown Manager';
@@ -326,6 +331,11 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
   const { accountId, month } = payload;
 
   if (!month || !MONTH_REGEX.test(month)) return { success: false, error: 'Invalid month format' };
+  // accountId is interpolated into JQL below — reject anything that isn't a
+  // plain Atlassian account ID to rule out JQL injection.
+  if (typeof accountId !== 'string' || !ACCOUNT_ID_REGEX.test(accountId)) {
+    return { success: false, error: 'Invalid account ID' };
+  }
 
   // Fetch manager's display name for audit entries
   let callerName = 'Unknown Manager';

@@ -290,6 +290,54 @@ describe('managerResolver', () => {
     expect(api.requestJira).toHaveBeenCalledTimes(2);
   });
 
+  // --- accountId JQL-injection hardening (#18) ---
+
+  it('bulkApprove rejects a JQL-injection payload in accountId before any Jira call', async () => {
+    storage.get.mockResolvedValueOnce(managerConfig);
+
+    const result = await invoke('bulkApprove', {
+      accountId: '" OR assignee IS NOT EMPTY OR x = "',
+      month: '2026-03-KUP',
+    });
+
+    expect(result).toEqual({ success: false, error: 'Invalid account ID' });
+    expect(api.requestJira).not.toHaveBeenCalled();
+  });
+
+  it('bulkUnapprove rejects a JQL-injection payload in accountId before any Jira call', async () => {
+    storage.get.mockResolvedValueOnce(managerConfig);
+
+    const result = await invoke('bulkUnapprove', {
+      accountId: 'x" AND issue.property[kup-data].kupMonth IS NOT EMPTY AND assignee = "y',
+      month: '2026-03-KUP',
+    });
+
+    expect(result).toEqual({ success: false, error: 'Invalid account ID' });
+    expect(api.requestJira).not.toHaveBeenCalled();
+  });
+
+  it('bulkApprove rejects a missing or non-string accountId', async () => {
+    storage.get.mockResolvedValueOnce(managerConfig);
+    const missing = await invoke('bulkApprove', { month: '2026-03-KUP' });
+    expect(missing).toEqual({ success: false, error: 'Invalid account ID' });
+
+    storage.get.mockResolvedValueOnce(managerConfig);
+    const nonString = await invoke('bulkApprove', { accountId: { evil: true }, month: '2026-03-KUP' });
+    expect(nonString).toEqual({ success: false, error: 'Invalid account ID' });
+    expect(api.requestJira).not.toHaveBeenCalled();
+  });
+
+  it('bulkApprove accepts a well-formed Atlassian account ID', async () => {
+    storage.get.mockResolvedValueOnce(managerConfig);
+
+    api.requestJira
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ displayName: 'Manager Mike' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ total: 0, issues: [] }) });
+
+    const result = await invoke('bulkApprove', { accountId: '557058:f58131cb-b67d-43c7-b30d-6b58d40bd077', month: '2026-03-KUP' });
+    expect(result).toEqual({ success: true, approvedCount: 0 });
+  });
+
   // --- getJiraGroups ---
 
   it('getJiraGroups returns Unauthorized for non-managers', async () => {
