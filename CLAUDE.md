@@ -41,14 +41,19 @@ This is an **Atlassian Forge** app for KUP (Knowledge Update Profile) 50% compli
 |--------|-----|----------|----------|
 | `jira:adminPage` | `kup-admin-settings` | `src/admin-ui/index.jsx` | `adminHandler` |
 | `jira:issueContext` | `kup-compliance-panel` | `src/kup-panel-ui/index.jsx` | `kupPanelHandler` |
-| `jira:globalPage` | `kup-report-page` | `src/kup-report-ui/index.jsx` | `kupReportHandler` |
-| `jira:dashboardGadget` | `compliance-*-gadget` | `static/hello-world/build/` | `handler` (stub) |
-| `jira:entityProperty` | `kup-data-indexing` | — | — |
+| `jira:globalPage` | `kup-report-page` (route `kup`) | `src/kup-global-ui/index.jsx` | `managerHandler` |
+| `jira:entityProperty` | `kup-data-indexing`, `kup-approval-indexing` | — | — |
+| `consumer` | `payroll-export-queue` | — | `exportAsyncHandler` |
 
 **Backend (`src/`):** Serverless Forge Functions on Node.js 24.x ARM64. Each resolver file exports a handler that is re-exported from `src/index.js`:
 - `admin-resolvers.js` — admin config: load/save projects, issue types, available months from `storage.get/set('kup_config')`
 - `panel-resolvers.js` — issue panel: check eligibility, read/write `kup-data` and `kup-audit-log` Issue Entity Properties via Jira REST API
-- `report-resolvers.js` — report page: JQL search using `issue.property[kup-data].kupMonth` to aggregate personal compliance hours
+- `manager-resolvers.js` — global page: personal report, manager approval, team/group filtering, audit log, and payroll export orchestration
+- `export-async-handler.js` — background queue consumer that aggregates monthly payroll data and produces XLSX/CSV output
+- `user-names.js` — live account ID to display-name resolution; no emails are persisted
+- `kup-defaults.js` — working-hours calendar and available-month helpers
+
+`report-resolvers.js` and `kup-report-ui/index.jsx` are legacy and are not wired to any current manifest module.
 
 **Frontend (`src/*-ui/*.jsx`):** Native UI Kit components from `@forge/react`. No standard React HTML elements (`<div>`, etc.) — use only components exported by UI Kit (see list in `AGENTS.md`). Use `DynamicTable`, not `Table`.
 
@@ -60,6 +65,6 @@ This is an **Atlassian Forge** app for KUP (Knowledge Update Profile) 50% compli
 
 > by the way — the audit logs are capped to stay under Forge's 240 KiB value limit: the per-issue `kup-audit-log` keeps the most recent 50 entries, and the central `kup_approval_log_{month}` keeps the most recent 500 per month. once a cap is hit the oldest entries are dropped (not archived), so the trail is a recent-history window, not a permanent record. fine for day-to-day use; if a customer ever needs unbounded retention we'd archive overflow to a separate key or export it out of Forge.
 
-**Authorization:** Use `.asApp()` for resolver-side Jira REST API calls (avoids individual user consent). The `read:jira-user` scope is required for fetching usernames in audit log entries.
+**Authorization:** Resolver-side Jira REST calls currently use `.asApp()` so the app can provide consistent reporting without per-user consent prompts. Every manager-only operation must still enforce the configured manager/admin authorization in the resolver; this app-level check is the security boundary and must be covered by tests. The `read:jira-user` scope is required for fetching usernames in audit log entries.
 
 **Tunnelling:** When using `forge tunnel`, do NOT redeploy on code-only changes (hot reload). Redeploy only when `manifest.yml` changes, then restart the tunnel.

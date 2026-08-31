@@ -4,6 +4,7 @@ import kvs, { WhereConditions } from '@forge/kvs';
 import { Queue } from '@forge/events';
 import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
 import { resolveUserNames } from './user-names.js';
+import { createRequestId, logSafe, safeErrorCode } from './safe-logger.js';
 
 const exportQueue = new Queue({ key: 'payroll-export-queue' });
 
@@ -37,10 +38,64 @@ async function checkIsManager(accountId) {
 }
 
 /**
+ * Fetch every member of a Jira group. The group-member endpoint is paginated;
+ * requesting only the first page would silently hide valid report users from
+ * managers of large groups.
+ */
+async function fetchGroupMemberIds(groupId, requestId, month) {
+  const memberIds = new Set();
+  const pageSize = 200;
+  let startAt = 0;
+  let groupPages = 0;
+
+  while (true) {
+    const groupRes = await api.asApp().requestJira(
+      route`/rest/api/3/group/member?groupId=${groupId}&startAt=${startAt}&maxResults=${pageSize}`
+    );
+    // Preserve the unfiltered report if Jira cannot verify the group. A
+    // transient group API failure must not make every user disappear.
+    if (!groupRes.ok) {
+      logSafe('warn', 'getManagerReport.groupFilter', {
+        requestId,
+        month,
+        groupPages,
+        httpStatus: groupRes.status,
+        membersProcessed: memberIds.size,
+        status: 'jira_error',
+      });
+      return null;
+    }
+
+    const groupData = await groupRes.json();
+    const values = groupData.values || [];
+    groupPages++;
+    for (const member of values) {
+      if (member.accountId) memberIds.add(member.accountId);
+    }
+
+    // Jira normally returns isLast. The length fallback also handles older
+    // responses that omit it while avoiding an unnecessary empty-page call.
+    if (groupData.isLast === true || values.length < pageSize) break;
+    startAt += values.length;
+  }
+
+  logSafe('info', 'getManagerReport.groupFilter', {
+    requestId,
+    month,
+    groupPages,
+    membersProcessed: memberIds.size,
+    status: 'success',
+  });
+  return memberIds;
+}
+
+/**
  * getManagerReport: Returns KUP data for all users matching the given month,
  * grouped by assignee, with optional group/team filtering.
  */
 managerResolver.define('getManagerReport', async ({ payload, context }) => {
+  const requestId = createRequestId();
+  const startedAt = Date.now();
   const callerAccountId = context.accountId;
   const isManager = await checkIsManager(callerAccountId);
   if (!isManager) return { error: 'Unauthorized' };
@@ -60,6 +115,7 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
   const allIssues = [];
   let nextPageToken = undefined;
   const maxResults = 100;
+  let pagesFetched = 0;
 
   while (true) {
     const requestBody = {
@@ -77,13 +133,21 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
     });
 
     if (!res.ok) {
-      const errText = await res.text();
-      console.warn('[getManagerReport] JQL search failed:', res.status, errText);
+      logSafe('warn', 'getManagerReport', {
+        requestId,
+        month,
+        httpStatus: res.status,
+        pagesFetched,
+        issuesProcessed: allIssues.length,
+        durationMs: Date.now() - startedAt,
+        status: 'jira_error',
+      });
       break;
     }
 
     const data = await res.json();
     allIssues.push(...data.issues);
+    pagesFetched++;
 
     if (!data.nextPageToken || data.issues.length < maxResults) break;
     nextPageToken = data.nextPageToken;
@@ -132,12 +196,8 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
 
   // Filter to Jira group members if groupId provided
   if (groupId) {
-    const groupRes = await api.asApp().requestJira(
-      route`/rest/api/3/group/member?groupId=${groupId}&maxResults=200`
-    );
-    if (groupRes.ok) {
-      const groupData = await groupRes.json();
-      const memberIds = new Set((groupData.values || []).map(m => m.accountId));
+    const memberIds = await fetchGroupMemberIds(groupId, requestId, month);
+    if (memberIds) {
       for (const uid of Object.keys(userMap)) {
         if (!memberIds.has(uid)) delete userMap[uid];
       }
@@ -172,6 +232,16 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
   const config = await kvs.get('kup_config');
   const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
   const maxWorkingHours = workingHoursMap[month] ?? null;
+
+  logSafe('info', 'getManagerReport', {
+    requestId,
+    month,
+    pagesFetched,
+    issuesProcessed: allIssues.length,
+    employeesProcessed: users.length,
+    durationMs: Date.now() - startedAt,
+    status: 'success',
+  });
 
   return { month, maxWorkingHours, users, unassignedIssues, maxKupPercent: config?.maxKupPercent ?? null, kupLimitEnforcement: config?.kupLimitEnforcement ?? 'warn' };
 });
@@ -414,6 +484,8 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
  * Used by the "My Report" tab of the global page.
  */
 managerResolver.define('getMyKupReport', async ({ payload, context }) => {
+  const requestId = createRequestId();
+  const startedAt = Date.now();
   const { month } = payload;
   if (!month) return { issues: [], totalHours: 0, maxWorkingHours: null };
   if (!MONTH_REGEX.test(month)) return { issues: [], totalHours: 0, maxWorkingHours: null };
@@ -446,9 +518,17 @@ managerResolver.define('getMyKupReport', async ({ payload, context }) => {
     const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
     const maxWorkingHours = workingHoursMap[month] ?? null;
 
+    logSafe('info', 'getMyKupReport', {
+      requestId,
+      month,
+      issuesProcessed: issues.length,
+      durationMs: Date.now() - startedAt,
+      status: 'success',
+    });
+
     return { issues, totalHours, maxWorkingHours, hasApprovedIssues, maxKupPercent: config?.maxKupPercent ?? null, kupLimitEnforcement: config?.kupLimitEnforcement ?? 'warn' };
   } catch (err) {
-    console.warn('getMyKupReport error', err);
+    logSafe('warn', 'getMyKupReport', { errorCode: safeErrorCode(err), status: 'error' });
     return { issues: [], totalHours: 0 };
   }
 });

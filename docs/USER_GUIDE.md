@@ -245,3 +245,6 @@ That person's Jira account has been deactivated or removed. The app stores only 
 
 **Do export files linger in storage?**
 No. A downloaded export is deleted immediately, and any un-downloaded one is auto-removed after one hour.
+
+**Can I recover KUP data if the app interface is unavailable?**
+Yes, for the core issue-level record. The Jira issue stores the KUP month and hours in `kup-data`, the approval status in `kup-approval`, and the most recent issue changes in `kup-audit-log`. An administrator can retrieve these properties through Jira's issue-property REST API or query the indexed KUP fields with JQL. The app's derived totals also use configuration and absence/overtime adjustments stored separately, so those values require access to the app storage as well.

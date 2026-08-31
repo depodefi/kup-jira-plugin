@@ -30,7 +30,7 @@ const KupReportPage = () => {
           setSelectedMonth(defaultOption);
         }
       } catch (err) {
-        console.error('Failed to load available months', err);
+        console.error('Failed to load available months');
       } finally {
         setLoading(false);
       }
@@ -46,7 +46,7 @@ const KupReportPage = () => {
         const data = await invoke('getMyKupReport', { month: selectedMonth.value });
         setReportData(data);
       } catch (err) {
-        console.error('Failed to fetch report data', err);
+        console.error('Failed to fetch report data');
         setReportData({ issues: [], totalHours: 0 });
       } finally {
         setFetchingReport(false);

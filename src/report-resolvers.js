@@ -1,6 +1,7 @@
 import Resolver from '@forge/resolver';
 import api, { route } from '@forge/api';
 import kvs from '@forge/kvs';
+import { logSafe, safeErrorCode } from './safe-logger.js';
 import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
@@ -68,7 +69,7 @@ kupReportResolver.define('getMyKupReport', async ({ payload, context }) => {
       maxWorkingHours,
     };
   } catch (err) {
-    console.warn("Exception during JQL fetch", err);
+    logSafe('warn', 'legacyReportSearch', { errorCode: safeErrorCode(err), status: 'error' });
     return { issues: [], totalHours: 0 };
   }
 });

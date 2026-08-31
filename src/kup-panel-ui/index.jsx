@@ -46,7 +46,7 @@ const KupPanel = () => {
       setGlobalPagePath(data.globalPagePath || null);
       setLoading(false);
     }).catch((err) => {
-      console.error('Failed to load panel data:', err);
+      console.error('Failed to load panel data');
       setEligible(false);
       setLoading(false);
     });

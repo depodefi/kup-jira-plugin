@@ -50,7 +50,7 @@ The global page hosts three tabs — **My Report**, **Manager Approval**, **Audi
 |------|---------|------------------|
 | `admin-resolvers.js` | `adminHandler` | Load/validate/save `kup_config`; fetch projects, issue types, custom fields, groups; role check |
 | `panel-resolvers.js` | `kupPanelHandler` | Issue eligibility, read/write `kup-data` + `kup-audit-log`, initialise `kup-approval`, edit-lock on approved issues |
-| `manager-resolvers.js` | `managerHandler` | Manager report, bulk approve/unapprove, personal report, absence/overtime adjustments, manager teams, central audit log, payroll-export request/poll |
+| `manager-resolvers.js` | `managerHandler` | Manager report, bulk approve/unapprove, personal report, absence/overtime adjustments, manager teams, paginated Jira-group filtering, central audit log, payroll-export request/poll |
 | `export-async-handler.js` | `exportAsyncHandler` | Background queue consumer: paginate issues, aggregate per employee, generate XLSX/CSV, stash result |
 | `user-names.js` | (helper) | `resolveUserNames(ids)` — live account-id → display-name, "Former user" fallback |
 | `kup-defaults.js` | (helper) | `DEFAULT_WORKING_HOURS` (2025–2030 PL calendar), `defaultAvailableMonths()` |
@@ -79,6 +79,16 @@ The global page hosts three tabs — **My Report**, **Manager Approval**, **Audi
 
 Only **account IDs** are persisted for identity — display names are resolved live at render time and emails are never stored (see [privacy note](#privacy--security)).
 
+### Recovery and fallback
+
+The issue properties are the durable source of truth for the core KUP record. If the app UI, a resolver, or app storage is temporarily unavailable, an administrator can still recover the essential values directly from Jira using the issue-property REST API or JQL:
+
+- `kup-data` — the KUP month and hours recorded on the issue;
+- `kup-approval` — the current approval status and approver account ID;
+- `kup-audit-log` — the most recent changes on that issue.
+
+Derived report values such as effective working hours still depend on app configuration and the absence/overtime adjustment entity, which are stored separately. The central monthly approval log is also supplementary: losing an old central entry does not remove the approval status stored on the affected issue.
+
 ### Permissions (scopes)
 
 | Scope | Used for |
@@ -104,9 +114,9 @@ npm install
 ```bash
 npx jest                                  # run the unit test suite
 forge lint                                # validate manifest.yml + scope usage
-forge deploy --non-interactive -e development
-forge install --non-interactive --site <your-site>.atlassian.net --product jira -e development
-forge install --non-interactive --upgrade --site <your-site>.atlassian.net --product jira -e development   # after a scope/manifest change
+forge deploy --non-interactive --environment development
+forge install --non-interactive --site <your-site>.atlassian.net --product jira --environment development
+forge install --non-interactive --upgrade --site <your-site>.atlassian.net --product jira --environment development   # after a scope/manifest change
 forge logs --since 15m -e development      # tail backend logs
 ```
 
@@ -125,11 +135,27 @@ npx jest                          # all suites
 npx jest src/manager-resolvers.test.js   # one suite
 ```
 
-Suites: `admin-resolvers.test.js`, `manager-resolvers.test.js`, `adjustment-resolvers.test.js`.
+Suites include admin, manager, adjustment, issue-panel, export error-handling, and export-load coverage. The load suite simulates 5,000 issues across 50 Jira pages and 1,000 employees.
+
+### Read-only load test against a Jira instance
+
+To generate real, read-only Jira API traffic against a test site, use `scripts/jira-readonly-load-test.mjs`. It exercises the same issue-property search used by the manager report and payroll export. It never creates, edits, or deletes Jira data, and credentials are read only from environment variables.
+
+```bash
+JIRA_BASE_URL=https://veloscope.atlassian.net \
+JIRA_EMAIL=your-account@example.com \
+JIRA_API_TOKEN='your-token' \
+KUP_MONTH=2026-03-KUP \
+LOAD_REQUESTS=100 \
+LOAD_CONCURRENCY=10 \
+node scripts/jira-readonly-load-test.mjs
+```
+
+Set `JIRA_GROUP_ID=<group-id>` to include one read-only group-member request per iteration. Start with low values and increase gradually while monitoring Jira and Forge metrics.
 
 ### Tech stack
 
-Forge (Node.js 24.x, ARM64, 256 MB) · UI Kit `@forge/react` · `@forge/kvs` storage · `@forge/events` async queue · [SheetJS `xlsx`](https://www.npmjs.com/package/xlsx) for Excel generation.
+Forge (Node.js 24.x, ARM64, 256 MB) · UI Kit `@forge/react` · `@forge/kvs` storage · `@forge/events` async queue · [`write-excel-file`](https://www.npmjs.com/package/write-excel-file) for Excel generation.
 
 ---
 
@@ -139,6 +165,13 @@ Forge (Node.js 24.x, ARM64, 256 MB) · UI Kit `@forge/react` · `@forge/kvs` sto
 - **Authorization** is enforced server-side: every manager-only resolver re-checks the caller's role against `kup_config` (manager users / groups) — the UI hiding tabs is convenience, not the security boundary.
 - **Input validation:** months, account IDs, hours, and the full config schema are validated in the resolvers; JQL is built only from validated values.
 - **Audit-log retention** is capped to stay under Forge's 240 KiB value limit (50 entries/issue, 500/month); oldest entries roll off rather than being archived — see `CLAUDE.md`.
+- **Operational logs** use an allow-listed JSON schema containing request IDs, status codes, timings, page counts, and aggregate counts. Account IDs, issue keys, names, emails, JQL, response bodies, and export contents are intentionally excluded.
+
+### Security verification status
+
+- `forge lint` and the Jest suite pass in the development environment; the suite currently contains 48 tests, including synthetic export-load and XLSX-generation coverage.
+- `@forge/react` is pinned to the current 12.x line. This removed the previous high-severity `linkify-it` findings and the unmaintained `xlsx` dependency. `npm audit --omit=dev --audit-level=high` still reports 8 moderate instances of `uuid@3.4.0` nested inside `@atlaskit/react-ufo`; the app does not import that package directly, and replacing it would require an upstream Atlassian package release rather than a safe application-level override.
+- A read-only live Jira load test was completed separately. A full authenticated DAST scan still requires an approved scanner and a defined test scope; it must not be run against production without that authorization.
 
 ---
 

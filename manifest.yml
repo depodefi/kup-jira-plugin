@@ -4,6 +4,7 @@ modules:
       title: KUP Compliance
       resource: kup-global-ui
       render: native
+      icon: resource:kup-icon;kup-icon.svg
       resolver:
         function: managerResolver
       route: kup
@@ -12,6 +13,7 @@ modules:
       title: KUP 50% Configuration
       resource: admin-ui
       render: native
+      icon: resource:kup-icon;kup-icon.svg
       resolver:
         function: adminResolver
   jira:entityProperty:
@@ -39,6 +41,7 @@ modules:
       label: KUP Compliance
       resource: kup-panel-ui
       render: native
+      icon: resource:kup-icon;kup-icon.svg
       resolver:
         function: kupPanelResolver
   function:
@@ -59,6 +62,8 @@ resources:
     path: src/kup-panel-ui/index.jsx
   - key: kup-global-ui
     path: src/kup-global-ui/index.jsx
+  - key: kup-icon
+    path: assets
 permissions:
   scopes:
     - storage:app

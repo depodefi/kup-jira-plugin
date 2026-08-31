@@ -386,7 +386,7 @@ const ManagerApprovalView = ({ months }) => {
         };
       });
       setTeamMembers(normalized);
-    }).catch(err => console.error('Failed to load groups/team', err));
+    }).catch(() => console.error('Failed to load groups/team'));
   }, [months]);
 
   const fetchAdjustments = useCallback(async (month) => {
@@ -396,7 +396,7 @@ const ManagerApprovalView = ({ months }) => {
       const data = await invoke('getAdjustmentsForMonth', { month });
       setAdjustmentsMap(data.adjustments || {});
     } catch (err) {
-      console.error('Failed to fetch adjustments', err);
+      console.error('Failed to fetch adjustments');
     } finally {
       setFetchingAdjustments(false);
     }
@@ -417,7 +417,7 @@ const ManagerApprovalView = ({ months }) => {
       const data = await invoke('getManagerReport', params);
       setReportData(data.error ? null : data);
     } catch (err) {
-      console.error('Failed to fetch manager report', err);
+      console.error('Failed to fetch manager report');
       setReportData(null);
     } finally {
       setFetching(false);
@@ -509,7 +509,7 @@ const ManagerApprovalView = ({ months }) => {
       // If My Team filter is active, refresh the report with updated team
       if (myTeamActive) await fetchReport();
     } catch (err) {
-      console.error('Failed to save team', err);
+      console.error('Failed to save team');
     } finally {
       setTeamSaving(false);
     }
@@ -1135,7 +1135,7 @@ const KupGlobalPage = () => {
         if (manager) setActiveTab('Manager Approval');
         setMonths(availableMonths.map(m => ({ label: m, value: m })));
       } catch (err) {
-        console.error('Failed to initialize KUP page', err);
+        console.error('Failed to initialize KUP page');
       } finally {
         setLoading(false);
       }

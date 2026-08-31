@@ -48,7 +48,7 @@ const ManagerApprovalPage = () => {
         const defaultOption = options.find(o => o.value === currentMonthString) || options[0];
         if (defaultOption) setSelectedMonth(defaultOption);
       } catch (err) {
-        console.error('Failed to initialize manager page', err);
+        console.error('Failed to initialize manager page');
       } finally {
         setLoading(false);
       }
@@ -68,7 +68,7 @@ const ManagerApprovalPage = () => {
       });
       setReportData(data.error ? null : data);
     } catch (err) {
-      console.error('Failed to fetch manager report', err);
+        console.error('Failed to fetch manager report');
       setReportData(null);
     } finally {
       setFetchingReport(false);

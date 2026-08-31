@@ -21,8 +21,8 @@
     "@forge/api": "^7.1.1",
     "@forge/events": "^2.1.2",
     "@forge/kvs": "^1.6.0",
-    "@forge/react": "^11.13.1",
+    "@forge/react": "^12.1.2",
     "@forge/resolver": "1.7.1",
-    "xlsx": "^0.18.5"
+    "write-excel-file": "^4.1.1"
   }
 }

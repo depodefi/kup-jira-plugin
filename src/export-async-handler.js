@@ -1,8 +1,9 @@
 import api, { route } from '@forge/api';
 import kvs, { WhereConditions } from '@forge/kvs';
-import * as XLSX from 'xlsx';
+import writeExcelFile from 'write-excel-file/node';
 import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
 import { resolveUserNames } from './user-names.js';
+import { createRequestId, logSafe, safeErrorCode } from './safe-logger.js';
 
 const adjustmentEntity = kvs.entity('user-monthly-adjustment');
 
@@ -26,28 +27,21 @@ function rowToArray(row, enableKupLimit, exportFieldMappings) {
   return cells;
 }
 
-function generateXlsx(rows, month, enableKupLimit, exportFieldMappings) {
+async function generateXlsx(rows, month, enableKupLimit, exportFieldMappings) {
   const headers = buildHeaders(enableKupLimit, exportFieldMappings);
-  const sheetData = [headers, ...rows.map(r => rowToArray(r, enableKupLimit, exportFieldMappings))];
+  const sheetData = [
+    headers.map(value => ({ value, fontWeight: 'bold' })),
+    ...rows.map(row => rowToArray(row, enableKupLimit, exportFieldMappings)),
+  ];
+  const columns = headers.map(header => ({ width: Math.max(String(header).length + 2, 14) }));
 
-  const ws = XLSX.utils.aoa_to_sheet(sheetData);
-
-  // Bold header row
-  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-  for (let col = range.s.c; col <= range.e.c; col++) {
-    const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
-    if (!ws[cellRef]) continue;
-    ws[cellRef].s = { font: { bold: true } };
-  }
-
-  // Auto column widths
-  ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 14) }));
-
-  const wb = XLSX.utils.book_new();
-  // Sheet names are limited to 31 characters
-  XLSX.utils.book_append_sheet(wb, ws, `KUP Payroll - ${month}`.slice(0, 31));
-
-  return XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+  // Sheet names are limited to 31 characters. The library returns a Buffer,
+  // which is encoded here because Forge storage persists the export as text.
+  const buffer = await writeExcelFile(sheetData, {
+    sheet: `KUP Payroll - ${month}`.slice(0, 31),
+    columns,
+  }).toBuffer();
+  return buffer.toString('base64');
 }
 
 function generateCsv(rows, enableKupLimit, exportFieldMappings) {
@@ -76,6 +70,10 @@ function generateCsv(rows, enableKupLimit, exportFieldMappings) {
 export async function exportAsyncHandler(event) {
   const { month, format, requestedBy } = event.body;
   const storageKey = `export_${requestedBy}_${month}`;
+  const requestId = createRequestId();
+  const startedAt = Date.now();
+  let pagesFetched = 0;
+  let issuesProcessed = 0;
 
   try {
     // 1. Load config
@@ -111,6 +109,8 @@ export async function exportAsyncHandler(event) {
       if (!res.ok) throw new Error(`Jira search failed with status ${res.status}`);
       const data = await res.json();
       allIssues.push(...(data.issues || []));
+      pagesFetched++;
+      issuesProcessed = allIssues.length;
       nextPageToken = data.issues?.length === 100 ? data.nextPageToken : undefined;
     } while (nextPageToken);
 
@@ -211,7 +211,7 @@ export async function exportAsyncHandler(event) {
       : `KUP_Payroll_${month}.csv`;
 
     const fileBase64 = format === 'xlsx'
-      ? generateXlsx(outputRows, month, enableKupLimit, exportFieldMappings)
+      ? await generateXlsx(outputRows, month, enableKupLimit, exportFieldMappings)
       : generateCsv(outputRows, enableKupLimit, exportFieldMappings);
 
     // 8. Store result — frontend will poll for it; 1-hour TTL cleans up unclaimed exports
@@ -222,12 +222,36 @@ export async function exportAsyncHandler(event) {
       createdAt: new Date().toISOString(),
     }, { ttl: { value: 1, unit: 'HOURS' } });
 
+    logSafe('info', 'exportPayroll', {
+      requestId,
+      month,
+      format,
+      pagesFetched,
+      issuesProcessed,
+      employeesProcessed: Object.keys(employeeMap).length,
+      exportRows: outputRows.length,
+      durationMs: Date.now() - startedAt,
+      status: 'success',
+    });
+
   } catch (err) {
-    console.error('[exportAsyncHandler] Export failed:', err);
+    logSafe('error', 'exportPayroll', {
+      requestId,
+      month,
+      format,
+      pagesFetched,
+      issuesProcessed,
+      durationMs: Date.now() - startedAt,
+      errorCode: safeErrorCode(err),
+      status: 'error',
+    });
     // Store error so the frontend can surface it instead of timing out
     await kvs.set(storageKey, {
       status: 'error',
-      message: err.message || 'Export failed unexpectedly',
+      // Do not persist the raw exception. Jira responses and runtime errors
+      // can contain implementation details that should never be shown to an
+      // end user; the full error remains available in Forge logs for support.
+      message: 'The payroll export could not be generated. Please try again or contact an administrator.',
       createdAt: new Date().toISOString(),
     }, { ttl: { value: 1, unit: 'HOURS' } });
   }

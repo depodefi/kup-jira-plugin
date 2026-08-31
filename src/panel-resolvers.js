@@ -2,6 +2,7 @@ import Resolver from '@forge/resolver';
 import api, { route } from '@forge/api';
 import kvs from '@forge/kvs';
 import { defaultAvailableMonths } from './kup-defaults.js';
+import { createRequestId, logSafe, safeErrorCode } from './safe-logger.js';
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
 const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -109,6 +110,7 @@ panelResolver.define('getAuditLog', async ({ context }) => {
  * The kupMonth format is YYYY-MM-KUP (e.g. "2026-01-KUP").
  */
 panelResolver.define('saveKupData', async ({ payload, context }) => {
+  const requestId = createRequestId();
   const issueId = context.extension?.issue?.id;
   if (!issueId || !payload) {
     return { success: false, error: 'Missing issue or payload' };
@@ -165,8 +167,7 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
       }
     );
     if (!saveRes.ok) {
-      const errText = await saveRes.text();
-      console.error('Failed to save KUP data:', saveRes.status, errText);
+      logSafe('error', 'saveKupData', { requestId, httpStatus: saveRes.status, status: 'jira_error' });
       return { success: false, error: 'Failed to save KUP data. Please try again.' };
     }
 
@@ -236,7 +237,7 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
 
     return { success: true, kupData: newData, auditLog };
   } catch (err) {
-    console.error('Error saving KUP data:', err);
+    logSafe('error', 'saveKupData', { requestId, errorCode: safeErrorCode(err), status: 'error' });
     return { success: false, error: 'An unexpected error occurred while saving. Please try again.' };
   }
 });

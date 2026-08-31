@@ -115,6 +115,53 @@ describe('managerResolver', () => {
     expect(bob.status).toBe('approved');
   });
 
+  it('getManagerReport paginates Jira group members beyond the first page', async () => {
+    storage.get
+      .mockResolvedValueOnce(managerConfig)
+      .mockResolvedValueOnce({ monthWorkingHours: { '2026-03-KUP': 176 } });
+
+    const firstGroupPage = Array.from({ length: 200 }, (_, index) => ({
+      accountId: index === 0 ? 'dev-001' : `other-${index}`,
+    }));
+
+    api.requestJira
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          issues: [
+            {
+              key: 'PROJ-1',
+              fields: { summary: 'Task A', assignee: { accountId: 'dev-001', displayName: 'Alice' } },
+              properties: { 'kup-data': { kupHours: 8 }, 'kup-approval': { status: 'pending' } },
+            },
+            {
+              key: 'PROJ-2',
+              fields: { summary: 'Task B', assignee: { accountId: 'dev-002', displayName: 'Bob' } },
+              properties: { 'kup-data': { kupHours: 4 }, 'kup-approval': { status: 'pending' } },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ values: firstGroupPage, isLast: false }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ values: [{ accountId: 'dev-002' }], isLast: true }),
+      });
+
+    const result = await invoke('getManagerReport', {
+      month: '2026-03-KUP',
+      groupId: 'developers',
+    });
+
+    expect(result.users.map(user => user.accountId)).toEqual(['dev-001', 'dev-002']);
+    expect(api.requestJira).toHaveBeenCalledTimes(3);
+    expect(api.requestJira.mock.calls[1][0]).toContain('startAt=0');
+    expect(api.requestJira.mock.calls[2][0]).toContain('startAt=200');
+  });
+
   it('getManagerReport status is "pending" when all issues are pending', async () => {
     storage.get
       .mockResolvedValueOnce(managerConfig)
