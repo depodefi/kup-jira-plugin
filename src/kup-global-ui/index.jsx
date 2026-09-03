@@ -594,15 +594,17 @@ const ManagerApprovalView = ({ months }) => {
 
   const head = {
     cells: [
-      { key: 'user', content: 'User', width: 18 },
-      { key: 'issues', content: 'Issues', width: 6 },
-      { key: 'totalHours', content: 'KUP Hours', width: 9 },
-      { key: 'maxHours', content: 'Max Hours', width: 9 },
-      { key: 'absence', content: 'Absence', width: 8 },
-      { key: 'overtime', content: 'Overtime', width: 8 },
-      { key: 'kupPct', content: 'KUP %', width: 8 },
-      { key: 'status', content: 'Status', width: 10 },
-      { key: 'action', content: 'Action', width: 10 },
+      { key: 'user', content: 'User', width: 16 },
+      // Expanded issue rows display their summary in this same column. Giving it
+      // enough space prevents a long title from wrapping beside empty detail cells.
+      { key: 'issues', content: 'Issues / Summary', width: 30 },
+      { key: 'totalHours', content: 'KUP Hours', width: 8 },
+      { key: 'maxHours', content: 'Max Hours', width: 8 },
+      { key: 'absence', content: 'Absence', width: 7 },
+      { key: 'overtime', content: 'Overtime', width: 7 },
+      { key: 'kupPct', content: 'KUP %', width: 6 },
+      { key: 'status', content: 'Status', width: 9 },
+      { key: 'action', content: 'Action', width: 9 },
     ],
   };
 
