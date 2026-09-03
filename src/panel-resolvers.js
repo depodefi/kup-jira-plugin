@@ -3,6 +3,7 @@ import api, { route } from '@forge/api';
 import kvs from '@forge/kvs';
 import { defaultAvailableMonths } from './kup-defaults.js';
 import { createRequestId, logSafe, safeErrorCode } from './safe-logger.js';
+import { trackPersonalData } from './privacy-data.js';
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
 const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -234,6 +235,11 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
         }
       );
     }
+
+    // The audit record links this KUP entry to the acting Jira account. Add
+    // that account to the privacy registry only after every related write has
+    // succeeded, so the registry never claims data that was not stored.
+    await trackPersonalData([accountId]);
 
     return { success: true, kupData: newData, auditLog };
   } catch (err) {

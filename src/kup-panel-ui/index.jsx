@@ -206,11 +206,11 @@ const KupPanel = () => {
           </Box>
         )}
 
-        {/* Link to KUP Compliance report */}
+        {/* Link to the KUP 50% Compliance report */}
         {globalPagePath && (
           <Box>
             <Button appearance="subtle" onClick={() => router.navigate(globalPagePath)}>
-              View KUP Compliance Report →
+              View KUP 50% Compliance Report →
             </Button>
           </Box>
         )}

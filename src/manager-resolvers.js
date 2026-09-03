@@ -5,6 +5,7 @@ import { Queue } from '@forge/events';
 import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
 import { resolveUserNames } from './user-names.js';
 import { createRequestId, logSafe, safeErrorCode } from './safe-logger.js';
+import { trackPersonalData } from './privacy-data.js';
 
 const exportQueue = new Queue({ key: 'payroll-export-queue' });
 
@@ -369,6 +370,7 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
     });
     if (centralLog.length > 500) centralLog = centralLog.slice(-500);
     await kvs.set(logKey, centralLog);
+    await trackPersonalData([callerAccountId, accountId]);
   }
 
   return { success: true, approvedCount, ...(limitWarning ? { warning: limitWarning } : {}) };
@@ -474,6 +476,7 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
     });
     if (centralLog.length > 500) centralLog = centralLog.slice(-500);
     await kvs.set(logKey, centralLog);
+    await trackPersonalData([callerAccountId, accountId]);
   }
 
   return { success: true, unapprovedCount };
@@ -587,13 +590,36 @@ managerResolver.define('getJiraGroups', async ({ context }) => {
 managerResolver.define('getManagerTeam', async ({ context }) => {
   const accountId = context.accountId;
   const team = await kvs.get(`kup_manager_team_${accountId}`);
-  return { members: team?.members || [] };
+  const storedMembers = team?.members || [];
+
+  // Older versions saved { accountId, displayName } objects. A display name is
+  // personal data that can change in Jira, so retain only the stable account
+  // IDs and resolve the current names when the team editor is opened.
+  const memberIds = [...new Set(storedMembers
+    .map(member => typeof member === 'string' ? member : member?.accountId)
+    .filter(memberId => typeof memberId === 'string' && ACCOUNT_ID_REGEX.test(memberId)))];
+
+  // Reading an old team also migrates it. This ensures legacy display names do
+  // not remain in Forge storage indefinitely waiting for a manager to resave
+  // the team manually.
+  if (storedMembers.some(member => typeof member !== 'string')) {
+    await kvs.set(`kup_manager_team_${accountId}`, { members: memberIds });
+  }
+
+  const names = await resolveUserNames(memberIds);
+  return {
+    members: memberIds.map(memberId => ({
+      accountId: memberId,
+      displayName: names.get(memberId) || 'Former user',
+    })),
+  };
 });
 
 /**
  * saveManagerTeam: Saves the manager's custom team.
  * Accepts members as { accountId, displayName } objects or plain accountId
- * strings; everything else is rejected and unknown keys are stripped.
+ * strings. Display names are intentionally discarded: they are resolved from
+ * Jira at read time so the app stores no stale profile names.
  */
 managerResolver.define('saveManagerTeam', async ({ payload, context }) => {
   const accountId = context.accountId;
@@ -603,20 +629,17 @@ managerResolver.define('saveManagerTeam', async ({ payload, context }) => {
     return { success: false, error: `Members must be an array of at most ${MAX_TEAM_MEMBERS} entries.` };
   }
 
-  const sanitized = [];
+  const memberIds = [];
   for (const m of members) {
     const memberId = typeof m === 'string' ? m : m?.accountId;
-    const displayName = (typeof m === 'object' && typeof m?.displayName === 'string') ? m.displayName : memberId;
     if (typeof memberId !== 'string' || !ACCOUNT_ID_REGEX.test(memberId)) {
       return { success: false, error: 'Invalid member account ID.' };
     }
-    if (typeof displayName !== 'string' || displayName.length > 255) {
-      return { success: false, error: 'Invalid member display name.' };
-    }
-    sanitized.push({ accountId: memberId, displayName });
+    if (!memberIds.includes(memberId)) memberIds.push(memberId);
   }
 
-  await kvs.set(`kup_manager_team_${accountId}`, { members: sanitized });
+  await kvs.set(`kup_manager_team_${accountId}`, { members: memberIds });
+  await trackPersonalData([accountId, ...memberIds]);
   return { success: true };
 });
 
@@ -695,6 +718,7 @@ managerResolver.define('saveMyAdjustment', async ({ payload, context }) => {
     updatedAt: new Date().toISOString(),
     updatedBy: accountId,
   });
+  await trackPersonalData([accountId]);
   return { success: true };
 });
 

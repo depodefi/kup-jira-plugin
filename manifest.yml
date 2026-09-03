@@ -1,7 +1,7 @@
 modules:
   jira:globalPage:
     - key: kup-report-page
-      title: KUP Compliance
+      title: KUP 50% Compliance
       resource: kup-global-ui
       render: native
       icon: resource:kup-icon;kup-icon.svg
@@ -35,10 +35,14 @@ modules:
     - key: payroll-export-queue
       queue: payroll-export-queue
       function: exportAsyncHandler
+  scheduledTrigger:
+    - key: kup-privacy-report
+      function: privacyReportHandler
+      interval: hour
   jira:issueContext:
     - key: kup-compliance-panel
-      title: KUP Compliance
-      label: KUP Compliance
+      title: KUP 50% Compliance
+      label: KUP 50% Compliance
       resource: kup-panel-ui
       render: native
       icon: resource:kup-icon;kup-icon.svg
@@ -55,6 +59,9 @@ modules:
       handler: index.managerHandler
     - key: exportAsyncHandler
       handler: index.exportAsyncHandler
+    - key: privacyReportHandler
+      handler: index.privacyReportHandler
+      timeoutSeconds: 120
 resources:
   - key: admin-ui
     path: src/admin-ui/index.jsx
@@ -67,6 +74,7 @@ resources:
 permissions:
   scopes:
     - storage:app
+    - report:personal-data
     - read:jira-work
     - write:jira-work
     - read:jira-user
@@ -99,3 +107,6 @@ app:
           - name: by-month
             range:
               - month
+          - name: by-account
+            range:
+              - accountId

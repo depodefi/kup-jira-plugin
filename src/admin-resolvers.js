@@ -2,6 +2,7 @@ import Resolver from '@forge/resolver';
 import api, { route } from '@forge/api';
 import kvs from '@forge/kvs';
 import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
+import { trackPersonalData } from './privacy-data.js';
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
 const ACCOUNT_ID_REGEX = /^[a-zA-Z0-9:-]{1,128}$/;
@@ -153,6 +154,7 @@ adminResolver.define('saveKupConfig', async ({ payload }) => {
   if (validationError) return { success: false, error: validationError };
 
   await kvs.set('kup_config', payload);
+  await trackPersonalData(payload.managerUsers || []);
   return { success: true };
 });
 

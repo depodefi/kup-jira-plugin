@@ -65,7 +65,7 @@ The global page hosts three tabs — **My Report**, **Manager Approval**, **Audi
 |--------------|-------|-------|
 | `kup_config` | config object (projects, months, working hours, managers, limit, export mappings) | Validated on save |
 | `user-monthly-adjustment` (custom entity) | `{ accountId, month, absenceHours, overtimeHours, … }` | Indexed `by-month`; absence/overtime |
-| `kup_manager_team_{accountId}` | `{ members: [{ accountId, displayName }] }` | A manager's custom team |
+| `kup_manager_team_{accountId}` | `{ members: [accountId] }` | A manager's custom team; names are resolved live from Jira |
 | `kup_approval_log_{month}` | `[ { action, managerId, targetUserId, issueKeys, … } ]` | Central audit log, **capped at 500/month** |
 | `export_{accountId}_{month}` | `{ data(base64), format, filename }` or `{ status:'error' }` | Transient export result, **1-hour TTL**, delete-on-read |
 
@@ -77,7 +77,7 @@ The global page hosts three tabs — **My Report**, **Manager Approval**, **Audi
 | `kup-approval` | `{ status, approvedBy, approvedAt }` | `status` (string) |
 | `kup-audit-log` | `[ { userId, timestamp, changes, action } ]` | — (**capped at 50/issue**) |
 
-Only **account IDs** are persisted for identity — display names are resolved live at render time and emails are never stored (see [privacy note](#privacy--security)).
+Account IDs are personal data and are persisted where necessary to associate KUP records, approvals, adjustments, and manager teams. Display names are resolved live at render time and email addresses are never stored. See the privacy section for the required reporting and erasure lifecycle.
 
 ### Recovery and fallback
 
@@ -98,6 +98,7 @@ Derived report values such as effective working hours still depend on app config
 | `write:jira-work` | Writing `kup-data` / `kup-approval` / `kup-audit-log` issue properties |
 | `read:jira-user` | Resolving display names, group membership, user lookups |
 | `manage:jira-configuration` | `GET /rest/api/3/group/member` (the manager report's Jira-group filter) |
+| `report:personal-data` | Reporting stored account IDs through the Forge Privacy API |
 
 ---
 
@@ -161,7 +162,8 @@ Forge (Node.js 24.x, ARM64, 256 MB) · UI Kit `@forge/react` · `@forge/kvs` sto
 
 ## Privacy & security
 
-- **No personal data beyond account IDs is persisted.** Display names are resolved live from the Jira user API at render time; email addresses are never stored.
+- **Data minimisation:** Account IDs are persisted only where needed to associate KUP records, approvals, adjustments, and manager teams. Display names are resolved live from the Jira user API and email addresses are never stored.
+- **Data inventory:** See [Personal Data Inventory](docs/PRIVACY_DATA_INVENTORY.md) for the current storage locations, purposes, and the privacy lifecycle that must be implemented before Marketplace publication.
 - **Authorization** is enforced server-side: every manager-only resolver re-checks the caller's role against `kup_config` (manager users / groups) — the UI hiding tabs is convenience, not the security boundary.
 - **Input validation:** months, account IDs, hours, and the full config schema are validated in the resolvers; JQL is built only from validated values.
 - **Audit-log retention** is capped to stay under Forge's 240 KiB value limit (50 entries/issue, 500/month); oldest entries roll off rather than being archived — see `CLAUDE.md`.

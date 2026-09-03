@@ -376,8 +376,8 @@ const ManagerApprovalView = ({ months }) => {
       invoke('getManagerTeam'),
     ]).then(([groups, team]) => {
       setJiraGroups([ALL_GROUPS_OPTION, ...groups.map(g => ({ label: g.name, value: g.groupId }))]);
-      // Normalize members — storage may contain raw UserPicker objects, plain strings,
-      // or our canonical { accountId, displayName } format from different versions.
+      // The resolver returns display names freshly resolved from Jira. The
+      // fallback keeps the editor usable while a legacy deployment is upgraded.
       const normalized = (team.members || []).map(m => {
         if (typeof m === 'string') return { accountId: m, displayName: m };
         return {
@@ -1149,7 +1149,7 @@ const KupGlobalPage = () => {
     <Box padding="space.400">
       <Stack space="space.400">
         {/* Page title comes from the global-page module title in manifest.yml —
-            no in-app Heading, to avoid a duplicate "KUP Compliance" header. */}
+            no in-app Heading, to avoid a duplicate "KUP 50% Compliance" header. */}
 
         {/* Tab bar — only shown to managers */}
         {isManager && (

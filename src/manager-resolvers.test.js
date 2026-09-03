@@ -474,7 +474,7 @@ describe('managerResolver', () => {
     expect(storage.set).not.toHaveBeenCalled();
   });
 
-  it('saveManagerTeam strips unknown keys and stores sanitized members', async () => {
+  it('saveManagerTeam strips profile fields and stores only account IDs', async () => {
     const result = await invoke('saveManagerTeam', {
       members: [
         { accountId: '557058:abc-def', displayName: 'Alice', extraneous: { huge: 'junk' } },
@@ -483,10 +483,7 @@ describe('managerResolver', () => {
     });
     expect(result).toEqual({ success: true });
     expect(storage.set).toHaveBeenCalledWith('kup_manager_team_manager-001', {
-      members: [
-        { accountId: '557058:abc-def', displayName: 'Alice' },
-        { accountId: 'dev-002', displayName: 'dev-002' },
-      ],
+      members: ['557058:abc-def', 'dev-002'],
     });
   });
 });

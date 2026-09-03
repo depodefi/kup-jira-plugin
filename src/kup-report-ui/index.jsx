@@ -78,7 +78,7 @@ const KupReportPage = () => {
   return (
     <Box padding="space.400">
       <Stack space="space.400">
-        <Heading size="large">My KUP Compliance Report</Heading>
+        <Heading size="large">My KUP 50% Compliance Report</Heading>
         
         <Box>
           <Text>Select a month to instantly calculate your total compliance hours registered across all your assigned Jira issues.</Text>
