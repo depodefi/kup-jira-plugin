@@ -1,17 +1,15 @@
 # Privacy Notice — KUP 50% Compliance for Jira
 
-> **Publication draft — legal review required.** Replace every bracketed
-> placeholder, confirm the uninstall-retention statement in section 7, and set
-> an effective date before publishing this notice. This notice is specific to
+> **Publication draft — legal review recommended.** This notice is specific to
 > KUP 50% Compliance for Jira (the **App**); it does not describe the separate
 > website analytics and cookie practices of veloscope.me.
 
-**Effective date:** [DATE]
+**Effective date:** 7 September 2026
 
-**Provider:** [FULL LEGAL ENTITY NAME], trading as Veloscope ("Veloscope",
+**Provider:** Michal Karpinski, trading as Veloscope ("Veloscope",
 "we", "us", or "our")  
-**Registered address:** [REGISTERED ADDRESS]  
-**Privacy contact:** [PRIVACY EMAIL ADDRESS]
+**Registered address:** Suchodolska 24, 06-014 Warszawa<br>
+**Privacy contact:** majk@veloscope.me
 
 ## 1. Scope
 
@@ -114,21 +112,24 @@ privacy registry entry. If an erasure attempt fails, it is retained for a
 later retry.
 
 Jira administrators may also request deletion or correction by contacting
-[PRIVACY EMAIL ADDRESS] and identifying the Jira site, the relevant account or
+majk@veloscope.me and identifying the Jira site, the relevant account or
 records, and the request. We may need to verify the request with the customer
 administrator before acting on it.
 
-**Uninstallation statement — complete before publication:**
-[STATE THE VERIFIED UNINSTALL BEHAVIOUR, INCLUDING WHETHER JIRA ISSUE
-PROPERTIES REMAIN, HOW A CUSTOMER REQUESTS DELETION, AND THE MINIMUM/MAXIMUM
-NUMBER OF DAYS DATA MAY REMAIN AFTER UNINSTALLATION.]
+After uninstallation, the App can no longer access the customer's Jira site.
+Atlassian Forge-hosted storage is retained by Atlassian for up to 28 days after
+uninstallation under its applicable storage lifecycle. Jira issue properties
+written by the App may remain on the related Jira issues after uninstallation.
+A Jira administrator can remove those properties using Jira's issue-property
+API, or contact majk@veloscope.me for assistance identifying the relevant
+properties before uninstalling the App.
 
 ## 8. Security
 
 We use the security controls provided by Atlassian Jira Cloud and Forge and
 restrict App access through Jira permissions and the App's configured roles.
 No security measure is absolute. If you believe you have found a security or
-privacy issue, contact [SECURITY EMAIL ADDRESS] and do not include passwords,
+privacy issue, contact majk@veloscope.me and do not include passwords,
 tokens, or unnecessary personal data in your report.
 
 ## 9. Your rights and choices
@@ -137,12 +138,12 @@ Depending on applicable law, individuals may have rights to request access,
 correction, deletion, restriction, objection, or portability of their personal
 data. Because the customer's organisation controls App use in Jira, please
 contact your employer or Jira administrator first. They can coordinate with us
-where needed. You may also contact [PRIVACY EMAIL ADDRESS].
+where needed. You may also contact majk@veloscope.me.
 
 ## 10. Changes to this notice
 
 We may update this notice when the App or applicable requirements change. We
-will publish the current version at [PUBLIC KUP PRIVACY POLICY URL] and update
+will publish the current version at https://veloscope.me/privacy.html and update
 the effective date above. Material changes will be communicated as required by
 applicable law or our agreement with the customer.
 
@@ -151,6 +152,6 @@ applicable law or our agreement with the customer.
 For privacy questions or requests relating to KUP 50% Compliance for Jira,
 contact:
 
-[FULL LEGAL ENTITY NAME] / Veloscope  
-[PRIVACY EMAIL ADDRESS]  
-[REGISTERED ADDRESS]
+Michal Karpinski / Veloscope<br>
+majk@veloscope.me<br>
+Suchodolska 24, 06-014 Warszawa
