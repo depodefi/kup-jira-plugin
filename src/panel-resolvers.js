@@ -4,6 +4,7 @@ import kvs from '@forge/kvs';
 import { defaultAvailableMonths } from './kup-defaults.js';
 import { createRequestId, logSafe, safeErrorCode } from './safe-logger.js';
 import { trackPersonalData } from './privacy-data.js';
+import { requireActiveLicense } from './license-guard.js';
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
 const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -248,4 +249,4 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
   }
 });
 
-export const kupPanelHandler = panelResolver.getDefinitions();
+export const kupPanelHandler = requireActiveLicense(panelResolver.getDefinitions());

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import ForgeReconciler, {
   Text, Select, Toggle, Button, Box, Stack, Inline, Heading, SectionMessage, Label, DynamicTable, Textfield, UserPicker, Lozenge
 } from '@forge/react';
-import { invoke } from '@forge/bridge';
+import { invoke, view } from '@forge/bridge';
 
 /**
  * Generate all month strings from 2025-01-KUP to 2030-12-KUP.
@@ -18,6 +18,7 @@ for (let year = 2025; year <= 2030; year++) {
 
 const AdminSettings = () => {
   const [loading, setLoading] = useState(true);
+  const [licenseActive, setLicenseActive] = useState(null);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMSG, setErrorMSG] = useState(null);
@@ -55,7 +56,19 @@ const AdminSettings = () => {
     { label: 'Block approval', value: 'block' },
   ];
 
+  // Marketplace licenses exist only in production. Non-production environments
+  // remain available for the paid-app test flow provided by the Forge CLI.
   useEffect(() => {
+    view.getContext()
+      .then(context => setLicenseActive(
+        context.environmentType !== 'PRODUCTION' || context.license?.active === true
+      ))
+      .catch(() => setLicenseActive(false));
+  }, []);
+
+  useEffect(() => {
+    if (licenseActive !== true) return;
+
     async function loadData() {
       try {
         const [context, config, groups, fields] = await Promise.all([
@@ -95,7 +108,7 @@ const AdminSettings = () => {
       }
     }
     loadData();
-  }, []);
+  }, [licenseActive]);
 
   useEffect(() => {
     if (isLoaded.current) setHasUnsavedChanges(true);
@@ -148,7 +161,19 @@ const AdminSettings = () => {
     }
   };
 
-  if (loading) return <Text>Loading configuration...</Text>;
+  // Data loading only starts for an active license. Otherwise `loading` stays
+  // true, so it must not hide the inactive-license message below.
+  if (licenseActive === null || (licenseActive === true && loading)) return <Text>Loading configuration...</Text>;
+
+  if (!licenseActive) {
+    return (
+      <Box padding="space.300">
+        <SectionMessage appearance="warning" title="Licencja wygasła lub jest nieaktywna">
+          <Text>Aby korzystać z KUP 50% Compliance, aktywuj lub odnów subskrypcję aplikacji w Atlassian Marketplace.</Text>
+        </SectionMessage>
+      </Box>
+    );
+  }
 
   // Convert enabledProjects to Select value format
   const selectedProjects = projectsData.filter(p => enabledProjects.includes(p.value));

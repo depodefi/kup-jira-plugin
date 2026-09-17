@@ -3,7 +3,7 @@ import ForgeReconciler, {
   Text, Select, Textfield, Button, Box, Stack, Inline, Heading, SectionMessage,
   Label, Spinner, Strong, Em, Lozenge, User
 } from '@forge/react';
-import { invoke, router } from '@forge/bridge';
+import { invoke, router, view } from '@forge/bridge';
 
 /**
  * KUP Compliance Panel — renders inside the Jira Issue Context sidebar.
@@ -12,6 +12,7 @@ import { invoke, router } from '@forge/bridge';
  */
 const KupPanel = () => {
   const [loading, setLoading] = useState(true);
+  const [licenseActive, setLicenseActive] = useState(null);
   const [saving, setSaving] = useState(false);
   const [eligible, setEligible] = useState(false);
   const [months, setMonths] = useState([]);
@@ -22,8 +23,20 @@ const KupPanel = () => {
   const [approval, setApproval] = useState(null);
   const [globalPagePath, setGlobalPagePath] = useState(null);
 
-  // Phase 1: load essential form data
+  // Marketplace licenses exist only in production. Non-production environments
+  // remain available for the paid-app test flow provided by the Forge CLI.
   useEffect(() => {
+    view.getContext()
+      .then(context => setLicenseActive(
+        context.environmentType !== 'PRODUCTION' || context.license?.active === true
+      ))
+      .catch(() => setLicenseActive(false));
+  }, []);
+
+  // Phase 1: load essential form data after the subscription is verified.
+  useEffect(() => {
+    if (licenseActive !== true) return;
+
     invoke('getPanelData').then((data) => {
       if (!data.eligible) {
         setEligible(false);
@@ -50,7 +63,7 @@ const KupPanel = () => {
       setEligible(false);
       setLoading(false);
     });
-  }, []);
+  }, [licenseActive]);
 
   // Phase 2: load audit log after form is visible
   useEffect(() => {
@@ -88,7 +101,9 @@ const KupPanel = () => {
   };
 
   // --- LOADING STATE: show form skeleton so layout is visible immediately ---
-  if (loading) {
+  // Data loading only starts for an active license. Otherwise `loading` stays
+  // true, so it must not hide the inactive-license message below.
+  if (licenseActive === null || (licenseActive === true && loading)) {
     return (
       <Box padding="space.200">
         <Stack space="space.200">
@@ -114,6 +129,16 @@ const KupPanel = () => {
             <Button appearance="primary" isDisabled={true}>Save KUP Data</Button>
           </Box>
         </Stack>
+      </Box>
+    );
+  }
+
+  if (!licenseActive) {
+    return (
+      <Box padding="space.200">
+        <SectionMessage appearance="warning" title="Licencja wygasła lub jest nieaktywna">
+          <Text>Aby korzystać z KUP 50% Compliance, poproś administratora Jira o aktywację lub odnowienie subskrypcji aplikacji w Atlassian Marketplace.</Text>
+        </SectionMessage>
       </Box>
     );
   }

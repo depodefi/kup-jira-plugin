@@ -6,6 +6,7 @@ import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js
 import { resolveUserNames } from './user-names.js';
 import { createRequestId, logSafe, safeErrorCode } from './safe-logger.js';
 import { trackPersonalData } from './privacy-data.js';
+import { requireActiveLicense } from './license-guard.js';
 
 const exportQueue = new Queue({ key: 'payroll-export-queue' });
 
@@ -819,4 +820,4 @@ managerResolver.define('getExportStatus', async ({ payload, context }) => {
   return { status: 'ready', data: result.data, format: result.format, filename: result.filename };
 });
 
-export const managerHandler = managerResolver.getDefinitions();
+export const managerHandler = requireActiveLicense(managerResolver.getDefinitions());

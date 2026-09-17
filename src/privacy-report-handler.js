@@ -35,9 +35,10 @@ async function processPendingUpdates() {
  * hourly, but each account is reported at most once every seven days. Cursor
  * state makes the job resumable and keeps one invocation bounded to 90 users.
  *
- * Deletion and refresh responses are deliberately kept pending until the
- * cross-store erasure handler is installed. We never discard the registry
- * record before its related KUP data has been erased.
+ * Deletion and refresh responses remain pending until processing succeeds.
+ * We never discard the registry record before its related KUP data has been
+ * erased. This maintenance must continue even when the subscription expires,
+ * because losing access to paid features does not remove retained data.
  */
 export async function privacyReportHandler() {
   const requestId = createRequestId();

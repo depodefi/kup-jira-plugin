@@ -39,6 +39,8 @@ modules:
     - key: kup-privacy-report
       function: privacyReportHandler
       interval: hour
+      # Keep privacy reporting and erasure running after a subscription expires:
+      # an inactive license does not remove previously stored personal data.
   jira:issueContext:
     - key: kup-compliance-panel
       title: KUP 50% Compliance
@@ -82,6 +84,8 @@ permissions:
     # manager report) — verified via forge lint; no narrower scope satisfies it.
     - manage:jira-configuration
 app:
+  licensing:
+    enabled: true
   runtime:
     name: nodejs24.x
     memoryMB: 256

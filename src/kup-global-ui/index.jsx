@@ -3,7 +3,7 @@ import ForgeReconciler, {
   Box, Stack, Inline, Heading, Select, DynamicTable, Spinner,
   Text, Strong, Button, SectionMessage, Lozenge, Link, Label, UserPicker, Textfield,
 } from '@forge/react';
-import { invoke } from '@forge/bridge';
+import { invoke, view } from '@forge/bridge';
 
 // ---------------------------------------------------------------------------
 // Helpers shared across views
@@ -1121,11 +1121,24 @@ const TABS = ['My Report', 'Manager Approval', 'Audit Log'];
 
 const KupGlobalPage = () => {
   const [loading, setLoading] = useState(true);
+  const [licenseActive, setLicenseActive] = useState(null);
   const [isManager, setIsManager] = useState(false);
   const [months, setMonths] = useState([]);
   const [activeTab, setActiveTab] = useState('My Report');
 
+  // Marketplace licenses exist only in production. Non-production environments
+  // remain available for the paid-app test flow provided by the Forge CLI.
   useEffect(() => {
+    view.getContext()
+      .then(context => setLicenseActive(
+        context.environmentType !== 'PRODUCTION' || context.license?.active === true
+      ))
+      .catch(() => setLicenseActive(false));
+  }, []);
+
+  useEffect(() => {
+    if (licenseActive !== true) return;
+
     async function init() {
       try {
         const [roleResult, availableMonths] = await Promise.all([
@@ -1143,9 +1156,21 @@ const KupGlobalPage = () => {
       }
     }
     init();
-  }, []);
+  }, [licenseActive]);
 
-  if (loading) return <Spinner size="large" />;
+  // Data loading only starts for an active license. Otherwise `loading` stays
+  // true, so it must not hide the inactive-license message below.
+  if (licenseActive === null || (licenseActive === true && loading)) return <Spinner size="large" />;
+
+  if (!licenseActive) {
+    return (
+      <Box padding="space.400">
+        <SectionMessage appearance="warning" title="Licencja wygasła lub jest nieaktywna">
+          <Text>Aby korzystać z KUP 50% Compliance, poproś administratora Jira o aktywację lub odnowienie subskrypcji aplikacji w Atlassian Marketplace.</Text>
+        </SectionMessage>
+      </Box>
+    );
+  }
 
   return (
     <Box padding="space.400">

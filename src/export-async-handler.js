@@ -4,6 +4,7 @@ import writeExcelFile from 'write-excel-file/node';
 import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
 import { resolveUserNames } from './user-names.js';
 import { createRequestId, logSafe, safeErrorCode } from './safe-logger.js';
+import { hasActiveLicense } from './license-guard.js';
 
 const adjustmentEntity = kvs.entity('user-monthly-adjustment');
 
@@ -68,6 +69,10 @@ function generateCsv(rows, enableKupLimit, exportFieldMappings) {
  * generates the requested file, and stores it in Forge storage for the frontend to poll.
  */
 export async function exportAsyncHandler(event) {
+  // Queue jobs can outlive the subscription that created them. Do not export
+  // payroll data after a production license becomes inactive.
+  if (!hasActiveLicense()) return;
+
   const { month, format, requestedBy } = event.body;
   const storageKey = `export_${requestedBy}_${month}`;
   const requestId = createRequestId();

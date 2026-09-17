@@ -3,6 +3,7 @@ import api, { route } from '@forge/api';
 import kvs from '@forge/kvs';
 import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
 import { trackPersonalData } from './privacy-data.js';
+import { requireActiveLicense } from './license-guard.js';
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
 const ACCOUNT_ID_REGEX = /^[a-zA-Z0-9:-]{1,128}$/;
@@ -193,4 +194,4 @@ adminResolver.define('getCurrentUserRole', async ({ context }) => {
   return { isManager: managerGroups.some(gid => userGroupIds.includes(gid)) };
 });
 
-export const adminHandler = adminResolver.getDefinitions();
+export const adminHandler = requireActiveLicense(adminResolver.getDefinitions());

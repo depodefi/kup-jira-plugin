@@ -3,6 +3,7 @@ import api, { route } from '@forge/api';
 import kvs from '@forge/kvs';
 import { logSafe, safeErrorCode } from './safe-logger.js';
 import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
+import { requireActiveLicense } from './license-guard.js';
 
 const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
 
@@ -74,4 +75,4 @@ kupReportResolver.define('getMyKupReport', async ({ payload, context }) => {
   }
 });
 
-export const kupReportHandler = kupReportResolver.getDefinitions();
+export const kupReportHandler = requireActiveLicense(kupReportResolver.getDefinitions());
