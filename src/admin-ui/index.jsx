@@ -1,8 +1,9 @@
+import { useLicenseStatus } from '../use-license-status.js';
 import React, { useEffect, useRef, useState } from 'react';
 import ForgeReconciler, {
   Text, Select, Toggle, Button, Box, Stack, Inline, Heading, SectionMessage, Label, DynamicTable, Textfield, UserPicker, Lozenge
 } from '@forge/react';
-import { invoke, view } from '@forge/bridge';
+import { invoke } from '@forge/bridge';
 
 /**
  * Generate all month strings from 2025-01-KUP to 2030-12-KUP.
@@ -18,7 +19,7 @@ for (let year = 2025; year <= 2030; year++) {
 
 const AdminSettings = () => {
   const [loading, setLoading] = useState(true);
-  const [licenseActive, setLicenseActive] = useState(null);
+  const { licenseActive, licenseMessage, checkLicense } = useLicenseStatus();
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMSG, setErrorMSG] = useState(null);
@@ -55,16 +56,6 @@ const AdminSettings = () => {
     { label: 'Warn only', value: 'warn' },
     { label: 'Block approval', value: 'block' },
   ];
-
-  // Marketplace licenses exist only in production. Non-production environments
-  // remain available for the paid-app test flow provided by the Forge CLI.
-  useEffect(() => {
-    view.getContext()
-      .then(context => setLicenseActive(
-        context.environmentType !== 'PRODUCTION' || context.license?.active === true
-      ))
-      .catch(() => setLicenseActive(false));
-  }, []);
 
   useEffect(() => {
     if (licenseActive !== true) return;
@@ -168,8 +159,9 @@ const AdminSettings = () => {
   if (!licenseActive) {
     return (
       <Box padding="space.300">
-        <SectionMessage appearance="warning" title="Licencja wygasła lub jest nieaktywna">
-          <Text>Aby korzystać z KUP 50% Compliance, aktywuj lub odnów subskrypcję aplikacji w Atlassian Marketplace.</Text>
+        <SectionMessage appearance="warning" title={licenseMessage.title}>
+          <Text>{licenseMessage.text}</Text>
+          <Button onClick={checkLicense}>Spróbuj ponownie</Button>
         </SectionMessage>
       </Box>
     );

@@ -1,9 +1,10 @@
+import { useLicenseStatus } from '../use-license-status.js';
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
   Text, Select, Textfield, Button, Box, Stack, Inline, Heading, SectionMessage,
   Label, Spinner, Strong, Em, Lozenge, User
 } from '@forge/react';
-import { invoke, router, view } from '@forge/bridge';
+import { invoke, router } from '@forge/bridge';
 
 /**
  * KUP Compliance Panel — renders inside the Jira Issue Context sidebar.
@@ -12,7 +13,7 @@ import { invoke, router, view } from '@forge/bridge';
  */
 const KupPanel = () => {
   const [loading, setLoading] = useState(true);
-  const [licenseActive, setLicenseActive] = useState(null);
+  const { licenseActive, licenseMessage, checkLicense } = useLicenseStatus();
   const [saving, setSaving] = useState(false);
   const [eligible, setEligible] = useState(false);
   const [months, setMonths] = useState([]);
@@ -22,16 +23,6 @@ const KupPanel = () => {
   const [message, setMessage] = useState(null);
   const [approval, setApproval] = useState(null);
   const [globalPagePath, setGlobalPagePath] = useState(null);
-
-  // Marketplace licenses exist only in production. Non-production environments
-  // remain available for the paid-app test flow provided by the Forge CLI.
-  useEffect(() => {
-    view.getContext()
-      .then(context => setLicenseActive(
-        context.environmentType !== 'PRODUCTION' || context.license?.active === true
-      ))
-      .catch(() => setLicenseActive(false));
-  }, []);
 
   // Phase 1: load essential form data after the subscription is verified.
   useEffect(() => {
@@ -136,8 +127,9 @@ const KupPanel = () => {
   if (!licenseActive) {
     return (
       <Box padding="space.200">
-        <SectionMessage appearance="warning" title="Licencja wygasła lub jest nieaktywna">
-          <Text>Aby korzystać z KUP 50% Compliance, poproś administratora Jira o aktywację lub odnowienie subskrypcji aplikacji w Atlassian Marketplace.</Text>
+        <SectionMessage appearance="warning" title={licenseMessage.title}>
+          <Text>{licenseMessage.text}</Text>
+          <Button onClick={checkLicense}>Spróbuj ponownie</Button>
         </SectionMessage>
       </Box>
     );

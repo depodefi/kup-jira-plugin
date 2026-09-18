@@ -3,6 +3,7 @@ import api from '@forge/api';
 import kvs from '@forge/kvs';
 
 jest.mock('@forge/api', () => ({
+  getAppContext: () => ({ environmentType: 'DEVELOPMENT' }),
   route: (strings, ...values) => strings[0] + values.join(''),
   asApp: jest.fn().mockReturnThis(),
   requestJira: jest.fn()

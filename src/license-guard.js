@@ -1,32 +1,54 @@
-import * as forgeApi from '@forge/api';
+import { getAppContext } from '@forge/api';
+import { logSafe } from './safe-logger.js';
 
 /**
- * Forge only provides Marketplace license details in production. Development
- * and staging must stay usable so the paid-app flow can be tested with the
- * Forge CLI's simulated license states before a Marketplace listing is live.
+ * Only the server determines entitlement. A missing license is different from
+ * an explicitly inactive license, and a runtime failure is neither of those.
+ * Never return account identifiers or commercial license details to the UI.
  */
-export function hasActiveLicense() {
-  // The unit-test mocks intentionally expose only the API methods used by the
-  // tested resolver. Treat a missing runtime-context helper as non-production;
-  // real Forge production invocations always provide this helper and context.
-  if (typeof forgeApi.getAppContext !== 'function') return true;
+export function getLicenseStatus(backendRuntimePayload) {
+  try {
+    const context = getAppContext();
+    const environment = context?.environmentType;
+    if (!['PRODUCTION', 'DEVELOPMENT', 'STAGING'].includes(environment)) {
+      return { status: 'error' };
+    }
+    // The resolver's second argument is supplied by Forge, not by the caller.
+    // Prefer its entitlement when present, as the Forge resolver itself does.
+    const license = backendRuntimePayload?.license ?? context.license;
+    if (license?.active === true) return { status: 'active' };
+    if (license?.active === false) return { status: 'inactive' };
+    if (license == null && environment !== 'PRODUCTION') return { status: 'active' };
+    return { status: license == null ? 'missing' : 'error' };
+  } catch {
+    return { status: 'error' };
+  }
+}
 
-  const { environmentType, license } = forgeApi.getAppContext();
-  return environmentType !== 'PRODUCTION' || license?.active === true;
+export function hasActiveLicense() {
+  return getLicenseStatus().status === 'active';
 }
 
 /**
- * Apply the Marketplace entitlement check to an entire resolver. This keeps
- * the server authoritative: users cannot bypass the UI's license message by
- * directly invoking an individual resolver operation.
+ * Expose a status-only operation even when paid operations are blocked. This
+ * lets every UI display the server's decision instead of guessing from browser
+ * context. Every other invocation still requires active entitlement.
  */
 export function requireActiveLicense(handler) {
   return async (...args) => {
-    if (!hasActiveLicense()) {
+    const result = getLicenseStatus(args[1]);
+    if (result.status !== 'active') {
+      logSafe('warn', 'licenseCheck', { status: result.status });
+    }
+    if (args[0]?.call?.functionKey === 'getLicenseStatus') return result;
+    if (result.status !== 'active') {
       return {
         success: false,
-        licenseRequired: true,
-        error: 'An active KUP 50% Compliance subscription is required to use this app.',
+        licenseRequired: result.status === 'inactive' || result.status === 'missing',
+        licenseStatus: result.status,
+        error: result.status === 'inactive'
+          ? 'An active KUP 50% Compliance subscription is required to use this app.'
+          : 'Unable to verify the KUP 50% Compliance license. Please retry or contact your administrator.',
       };
     }
     return handler(...args);
