@@ -107,11 +107,9 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
   if (!month || !MONTH_REGEX.test(month)) return { error: 'Invalid month format' };
   if (!VALID_STATUS_FILTERS.includes(statusFilter)) return { error: 'Invalid status filter' };
 
-  // Build JQL
-  let jql = `issue.property[kup-data].kupMonth = "${month}"`;
-  if (statusFilter !== 'all') {
-    jql += ` AND issue.property[kup-approval].status = "${statusFilter}"`;
-  }
+  // Always fetch the complete month. Filtering individual issues here would
+  // change an employee's total hours and KUP percentage between views.
+  const jql = `issue.property[kup-data].kupMonth = "${month}"`;
 
   // Paginate through all matching issues using cursor-based pagination
   const allIssues = [];
@@ -221,15 +219,9 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
     }
   }
 
-  // Names are presentation data: resolve them live and never persist them in
-  // issue properties, exports, or the app's privacy registry.
-  const employeeNames = await resolveUserNames(Object.keys(userMap));
-  for (const [uid, user] of Object.entries(userMap)) {
-    user.displayName = employeeNames.get(uid) || 'Former user';
-  }
-
-  // Compute per-user aggregate status
-  const users = Object.values(userMap).map(user => {
+  // Compute status from every issue belonging to the employee, then apply the
+  // selected filter to employees rather than to their individual issues.
+  let users = Object.values(userMap).map(user => {
     const statuses = new Set(user.issues.map(i => i.status));
     let status;
     if (statuses.size === 1 && statuses.has('approved')) status = 'approved';
@@ -237,6 +229,21 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
     else status = 'mixed';
     return { ...user, status };
   });
+  if (statusFilter === 'pending') {
+    // A mixed employee still has work awaiting approval and belongs in the
+    // Pending view, with their full monthly totals preserved.
+    users = users.filter(user => user.status === 'pending' || user.status === 'mixed');
+  } else if (statusFilter === 'approved') {
+    users = users.filter(user => user.status === 'approved');
+  }
+
+  // Names are presentation data: resolve them live and never persist them in
+  // issue properties, exports, or the app's privacy registry.
+  const employeeNames = await resolveUserNames(users.map(user => user.accountId));
+  users = users.map(user => ({
+    ...user,
+    displayName: employeeNames.get(user.accountId) || 'Former user',
+  }));
 
   const config = await kvs.get('kup_config');
   const workingHoursMap = resolveWorkingHours(config);

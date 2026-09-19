@@ -124,7 +124,7 @@ Managers work from the global **KUP Compliance** page. Open it from the Jira top
 **Filters (top row):**
 
 - **Month** — the reporting period to review.
-- **Status** — *All*, *Pending*, or *Approved*.
+- **Status** — *All*, *Pending*, or *Approved*. The app always calculates each employee's complete monthly total first. *Pending* includes employees with mixed approved/pending issues because they still require action; *Approved* includes only employees whose entire month is approved.
 - **Jira group** — limit the list to members of a Jira group.
 - **My Team** — limit the list to your own custom team (see [My Team](#my-team)).
 - **Refresh** — re-fetch after changes.

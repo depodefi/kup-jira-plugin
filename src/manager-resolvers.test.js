@@ -205,21 +205,43 @@ describe('managerResolver', () => {
     expect(alice.totalHours).toBe(8);
   });
 
-  it('getManagerReport filters by statusFilter in JQL', async () => {
+  it('getManagerReport filters employees after preserving their full monthly totals', async () => {
     storage.get
       .mockResolvedValueOnce(managerConfig)
       .mockResolvedValueOnce({});
 
     api.requestJira.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ total: 0, issues: [] }),
+      json: async () => ({
+        issues: [
+          {
+            key: 'PROJ-1', fields: { summary: 'Approved work' },
+            properties: { 'kup-data': { kupHours: 8, employeeAccountId: 'dev-001' }, 'kup-approval': { status: 'approved' } },
+          },
+          {
+            key: 'PROJ-2', fields: { summary: 'Pending work' },
+            properties: { 'kup-data': { kupHours: 4, employeeAccountId: 'dev-001' }, 'kup-approval': { status: 'pending' } },
+          },
+          {
+            key: 'PROJ-3', fields: { summary: 'Fully approved employee' },
+            properties: { 'kup-data': { kupHours: 16, employeeAccountId: 'dev-002' }, 'kup-approval': { status: 'approved' } },
+          },
+        ],
+      }),
     });
 
-    await invoke('getManagerReport', { month: '2026-03', statusFilter: 'pending' });
+    const result = await invoke('getManagerReport', { month: '2026-03', statusFilter: 'pending' });
 
     const [, callArgs] = api.requestJira.mock.calls[0];
     const body = JSON.parse(callArgs.body);
-    expect(body.jql).toContain("issue.property[kup-approval].status = \"pending\"");
+    expect(body.jql).not.toContain('kup-approval');
+    expect(result.users).toHaveLength(1);
+    expect(result.users[0]).toEqual(expect.objectContaining({
+      accountId: 'dev-001',
+      totalHours: 12,
+      issueCount: 2,
+      status: 'mixed',
+    }));
   });
 
   // --- bulkApprove ---
