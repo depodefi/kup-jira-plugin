@@ -16,6 +16,7 @@ import { PERIOD_PATTERN as MONTH_REGEX } from './kup-period.js';
 const VALID_STATUS_FILTERS = ['all', 'pending', 'approved'];
 const ACCOUNT_ID_REGEX = /^[a-zA-Z0-9:-]{1,128}$/;
 const MAX_TEAM_MEMBERS = 100;
+const MAX_UNREPORTED_ISSUES = 500;
 
 const managerResolver = new Resolver();
 
@@ -548,6 +549,112 @@ managerResolver.define('getMyKupReport', async ({ payload, context }) => {
   } catch (err) {
     logSafe('warn', 'getMyKupReport', { errorCode: safeErrorCode(err), status: 'error' });
     return { issues: [], totalHours: 0 };
+  }
+});
+
+/**
+ * Return the first day after a reporting month. Building the date from numeric
+ * year/month parts avoids timezone conversions around midnight and year-end.
+ */
+function nextMonthStart(month) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  if (monthNumber === 12) return `${year + 1}-01-01`;
+  return `${year}-${String(monthNumber + 1).padStart(2, '0')}-01`;
+}
+
+/**
+ * Check whether an issue belongs to the administrator's configured KUP scope.
+ * A missing configuration and an omitted enableAll flag both mean "all", which
+ * matches the first-run behaviour of the issue panel and administration page.
+ */
+function isIssueEligibleForKup(config, issue) {
+  if (!config || config.enableAll !== false) return true;
+
+  const projectId = issue.fields?.project?.id;
+  const issueTypeId = issue.fields?.issuetype?.id;
+  if (!projectId || !config.enabledProjects?.includes(projectId)) return false;
+
+  const allowedIssueTypes = config.projectSpecificIssueTypes?.[projectId] || [];
+  return allowedIssueTypes.length === 0 || allowedIssueTypes.includes(issueTypeId);
+}
+
+/**
+ * getMyUnreportedIssues: On demand, find issues that may need a KUP entry.
+ *
+ * The query runs as the current user so Jira's own project and issue-security
+ * permissions determine what can be returned. "Completed in the month" uses
+ * Jira's resolution date. An issue with any saved kupHours value is considered
+ * reported, even when that value is zero, because the user has explicitly
+ * reviewed and saved it.
+ */
+managerResolver.define('getMyUnreportedIssues', async ({ payload }) => {
+  const month = payload?.month;
+  if (!month || !MONTH_REGEX.test(month)) return { issues: [], error: 'Invalid month format' };
+
+  const monthStart = `${month}-01`;
+  const monthEnd = nextMonthStart(month);
+  const jql = `assignee = currentUser() AND resolutiondate >= "${monthStart}" AND resolutiondate < "${monthEnd}" AND issue.property[kup-data].kupHours IS EMPTY ORDER BY resolutiondate DESC`;
+
+  try {
+    const config = await kvs.get('kup_config');
+    const matchingIssues = [];
+    let nextPageToken;
+
+    do {
+      const requestBody = {
+        jql,
+        fields: ['summary', 'project', 'issuetype', 'resolutiondate'],
+        properties: ['kup-data'],
+        maxResults: 100,
+        ...(nextPageToken ? { nextPageToken } : {}),
+      };
+
+      const res = await api.asUser().requestJira(route`/rest/api/3/search/jql`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!res.ok) {
+        logSafe('warn', 'getMyUnreportedIssues', {
+          month,
+          httpStatus: res.status,
+          status: 'jira_error',
+        });
+        return { issues: [], error: 'Unable to search Jira issues. Please try again.' };
+      }
+
+      const data = await res.json();
+      for (const issue of data.issues || []) {
+        if (!isIssueEligibleForKup(config, issue)) continue;
+        matchingIssues.push({
+          key: issue.key,
+          summary: issue.fields?.summary || '',
+          resolvedAt: issue.fields?.resolutiondate || null,
+        });
+      }
+
+      // Finish filtering the current Jira page before applying the display
+      // limit. This lets us report truncation accurately when the limit is
+      // reached part-way through the final page.
+      if (matchingIssues.length >= MAX_UNREPORTED_ISSUES) {
+        return {
+          issues: matchingIssues.slice(0, MAX_UNREPORTED_ISSUES),
+          truncated: matchingIssues.length > MAX_UNREPORTED_ISSUES || Boolean(data.nextPageToken),
+        };
+      }
+
+      nextPageToken = data.nextPageToken;
+    } while (nextPageToken);
+
+    return { issues: matchingIssues, truncated: false };
+  } catch (err) {
+    logSafe('warn', 'getMyUnreportedIssues', {
+      month,
+      errorCode: safeErrorCode(err),
+      status: 'error',
+    });
+    return { issues: [], error: 'Unable to search Jira issues. Please try again.' };
   }
 });
 

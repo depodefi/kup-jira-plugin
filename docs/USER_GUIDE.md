@@ -216,6 +216,8 @@ Open **Apps → KUP Compliance** from the Jira top navigation. Employees see the
    - **KUP %** — your percentage, with a status lozenge (*On track*, *Approaching limit*, *Over limit*).
 3. The **Issues** table lists every issue contributing hours, sorted by hours.
 
+If the report looks incomplete, use **Find issues** under **Completed issues without KUP hours**. The app searches for eligible Jira issues that are currently assigned to you, were resolved during the selected month, and do not have a saved KUP-hours entry. The search runs only when you press the button and respects your Jira permissions.
+
 If you're over the company limit, a warning explains whether your manager can still approve (warn mode) or not (block mode), and how many KUP hours you have left.
 
 ### Hours adjustment (absence & overtime)

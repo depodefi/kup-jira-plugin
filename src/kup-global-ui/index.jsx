@@ -73,6 +73,7 @@ const STATUS_FILTER_OPTIONS = [
   { label: 'Pending', value: 'pending' },
   { label: 'Approved', value: 'approved' },
 ];
+const UNREPORTED_ISSUE_LIMIT = 500;
 
 // ---------------------------------------------------------------------------
 // My KUP Report view
@@ -86,6 +87,10 @@ const MyReportView = () => {
   const [overtimeHours, setOvertimeHours] = useState('0');
   const [adjustmentSaving, setAdjustmentSaving] = useState(false);
   const [adjustmentMessage, setAdjustmentMessage] = useState(null); // { type, text }
+  const [unreportedIssues, setUnreportedIssues] = useState(null);
+  const [unreportedLoading, setUnreportedLoading] = useState(false);
+  const [unreportedError, setUnreportedError] = useState(null);
+  const [unreportedTruncated, setUnreportedTruncated] = useState(false);
 
   useEffect(() => {
     const defaultOption = currentMonthDefault();
@@ -96,6 +101,9 @@ const MyReportView = () => {
     if (!selectedMonth) return;
     setFetching(true);
     setAdjustmentMessage(null);
+    setUnreportedIssues(null);
+    setUnreportedError(null);
+    setUnreportedTruncated(false);
     Promise.all([
       invoke('getMyKupReport', { month: selectedMonth.value }),
       invoke('getMyAdjustment', { month: selectedMonth.value }),
@@ -107,6 +115,28 @@ const MyReportView = () => {
       setReportData({ issues: [], totalHours: 0 });
     }).finally(() => setFetching(false));
   }, [selectedMonth]);
+
+  const handleFindUnreportedIssues = async () => {
+    if (!selectedMonth) return;
+
+    setUnreportedLoading(true);
+    setUnreportedError(null);
+    try {
+      const result = await invoke('getMyUnreportedIssues', { month: selectedMonth.value });
+      if (result.error) {
+        setUnreportedIssues(null);
+        setUnreportedError(result.error);
+        return;
+      }
+      setUnreportedIssues(result.issues || []);
+      setUnreportedTruncated(result.truncated === true);
+    } catch (err) {
+      setUnreportedIssues(null);
+      setUnreportedError(err.message || 'Unable to search Jira issues. Please try again.');
+    } finally {
+      setUnreportedLoading(false);
+    }
+  };
 
   const handleSaveAdjustment = async () => {
     const absence = parseFloat(absenceHours) || 0;
@@ -194,6 +224,23 @@ const MyReportView = () => {
       { key: 'issue', content: <Link href={`/browse/${issue.key}`} openNewTab={true}>{issue.key}</Link> },
       { key: 'summary', content: <Text>{issue.summary}</Text> },
       { key: 'hours', content: <Strong>{issue.hours}</Strong> },
+    ],
+  }));
+
+  const unreportedHead = {
+    cells: [
+      { key: 'issue', content: 'Issue Key' },
+      { key: 'summary', content: 'Summary' },
+      { key: 'resolved', content: 'Completed' },
+    ],
+  };
+
+  const unreportedRows = (unreportedIssues || []).map((issue, i) => ({
+    key: `unreported-${i}-${issue.key}`,
+    cells: [
+      { key: 'issue', content: <Link href={`/browse/${issue.key}`} openNewTab={true}>{issue.key}</Link> },
+      { key: 'summary', content: <Text>{issue.summary}</Text> },
+      { key: 'resolved', content: <Text>{issue.resolvedAt?.slice(0, 10) || '—'}</Text> },
     ],
   }));
 
@@ -312,6 +359,45 @@ const MyReportView = () => {
               emptyView="You have zero KUP hours logged on assigned issues for this month."
             />
           </Stack>
+
+          {/* This search is deliberately user-triggered. Most report visits do
+              not need a second Jira query, while an empty report provides a
+              clear next step instead of leaving the employee at a dead end. */}
+          <Box padding="space.250" backgroundColor="color.background.neutral" xcss={{ borderRadius: 'radius.small' }}>
+            <Stack space="space.200">
+              <Inline spread="space-between" alignBlock="center">
+                <Stack space="space.050">
+                  <Heading size="small">Completed issues without KUP hours</Heading>
+                  <Text color="color.text.subtle">
+                    Find eligible issues assigned to you and completed in {selectedMonth ? formatMonthLabel(selectedMonth.value) : 'the selected month'} that do not have a KUP entry.
+                  </Text>
+                </Stack>
+                <Button onClick={handleFindUnreportedIssues} isDisabled={unreportedLoading}>
+                  {unreportedLoading ? 'Searching...' : unreportedIssues === null ? 'Find issues' : 'Refresh list'}
+                </Button>
+              </Inline>
+
+              {unreportedError && (
+                <SectionMessage appearance="error">
+                  <Text>{unreportedError}</Text>
+                </SectionMessage>
+              )}
+
+              {unreportedIssues !== null && (
+                <DynamicTable
+                  head={unreportedHead}
+                  rows={unreportedRows}
+                  emptyView="No completed issues without KUP hours were found for this month."
+                />
+              )}
+
+              {unreportedTruncated && (
+                <SectionMessage appearance="information">
+                  <Text>Showing the first {UNREPORTED_ISSUE_LIMIT} matching issues.</Text>
+                </SectionMessage>
+              )}
+            </Stack>
+          </Box>
         </Stack>
       )}
     </Stack>

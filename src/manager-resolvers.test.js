@@ -7,6 +7,7 @@ jest.mock('@forge/api', () => ({
   getAppContext: () => ({ environmentType: 'DEVELOPMENT' }),
   route: (strings, ...values) => strings.reduce((acc, str, i) => acc + str + (values[i] ?? ''), ''),
   asApp: jest.fn().mockReturnThis(),
+  asUser: jest.fn().mockReturnThis(),
   requestJira: jest.fn(),
 }));
 
@@ -420,6 +421,84 @@ describe('managerResolver', () => {
 
     const result = await invoke('bulkApprove', { accountId: '557058:f58131cb-b67d-43c7-b30d-6b58d40bd077', month: '2026-03' });
     expect(result).toEqual({ success: true, approvedCount: 0 });
+  });
+
+  // --- My Report: completed issues without KUP hours ---
+
+  it('finds the current user completed issues without KUP hours for the selected month', async () => {
+    storage.get.mockResolvedValueOnce(undefined);
+    api.requestJira.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        issues: [{
+          key: 'PROJ-42',
+          fields: {
+            summary: 'Completed creative work',
+            project: { id: '10000' },
+            issuetype: { id: '10001' },
+            resolutiondate: '2026-09-19T10:30:00.000+0200',
+          },
+          properties: {},
+        }],
+      }),
+    });
+
+    const result = await invoke('getMyUnreportedIssues', { month: '2026-09' }, 'dev-001');
+
+    expect(result).toEqual({
+      issues: [{
+        key: 'PROJ-42',
+        summary: 'Completed creative work',
+        resolvedAt: '2026-09-19T10:30:00.000+0200',
+      }],
+      truncated: false,
+    });
+    expect(api.asUser).toHaveBeenCalled();
+    const searchBody = JSON.parse(api.requestJira.mock.calls[0][1].body);
+    expect(searchBody.jql).toContain('assignee = currentUser()');
+    expect(searchBody.jql).toContain('resolutiondate >= "2026-09-01"');
+    expect(searchBody.jql).toContain('resolutiondate < "2026-10-01"');
+    expect(searchBody.jql).toContain('issue.property[kup-data].kupHours IS EMPTY');
+  });
+
+  it('filters unreported issues through the configured project and issue-type scope', async () => {
+    storage.get.mockResolvedValueOnce({
+      enableAll: false,
+      enabledProjects: ['10000'],
+      projectSpecificIssueTypes: { '10000': ['10001'] },
+    });
+    api.requestJira.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        issues: [
+          {
+            key: 'PROJ-1',
+            fields: { summary: 'Eligible', project: { id: '10000' }, issuetype: { id: '10001' }, resolutiondate: '2026-12-10' },
+          },
+          {
+            key: 'PROJ-2',
+            fields: { summary: 'Wrong type', project: { id: '10000' }, issuetype: { id: '10002' }, resolutiondate: '2026-12-11' },
+          },
+          {
+            key: 'OTHER-1',
+            fields: { summary: 'Wrong project', project: { id: '20000' }, issuetype: { id: '10001' }, resolutiondate: '2026-12-12' },
+          },
+        ],
+      }),
+    });
+
+    const result = await invoke('getMyUnreportedIssues', { month: '2026-12' }, 'dev-001');
+
+    expect(result.issues.map(issue => issue.key)).toEqual(['PROJ-1']);
+    const searchBody = JSON.parse(api.requestJira.mock.calls[0][1].body);
+    expect(searchBody.jql).toContain('resolutiondate < "2027-01-01"');
+  });
+
+  it('rejects an invalid month before searching for unreported issues', async () => {
+    const result = await invoke('getMyUnreportedIssues', { month: 'September 2026' }, 'dev-001');
+
+    expect(result).toEqual({ issues: [], error: 'Invalid month format' });
+    expect(api.requestJira).not.toHaveBeenCalled();
   });
 
   // --- getJiraGroups ---
