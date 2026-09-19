@@ -63,6 +63,23 @@ describe('adminResolver', () => {
     expect(storage.get).toHaveBeenCalledWith('kup_config');
   });
 
+  it('getKupConfig returns enable-all defaults before the first save', async () => {
+    storage.get.mockResolvedValueOnce(undefined);
+
+    const result = await adminHandler({
+      context: {},
+      contextToken: 'token',
+      payload: {},
+      call: { functionKey: 'getKupConfig' }
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      enableAll: true,
+      enabledProjects: [],
+      enabledIssueTypes: [],
+    }));
+  });
+
   it('saveKupConfig should save config and return success', async () => {
     storage.set.mockResolvedValueOnce();
 

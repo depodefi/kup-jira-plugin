@@ -34,8 +34,17 @@ const panelResolver = new Resolver();
  * no Jira API call needed.
  */
 function checkEligibility(config, projectId, issueTypeId) {
-  if (!config || !projectId) return false;
-  if (config.enableAll === true) return true;
+  if (!projectId) return false;
+
+  // A new installation has no kup_config value until an administrator saves
+  // the settings for the first time. The administration screen presents
+  // "Enable all" as the default, so the resolver must apply the same default
+  // instead of making every issue ineligible during first use. Treating an
+  // omitted enableAll field as enabled also keeps older partial configurations
+  // consistent with the administration UI. Only an explicit false opts into
+  // the project and issue-type allowlist below.
+  if (!config || config.enableAll !== false) return true;
+
   if (!config.enabledProjects?.includes(projectId)) return false;
   const projectIssueTypes = config.projectSpecificIssueTypes?.[projectId] || [];
   if (projectIssueTypes.length === 0) return true;

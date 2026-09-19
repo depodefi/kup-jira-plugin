@@ -127,6 +127,9 @@ adminResolver.define('getKupConfig', async () => {
 
   return {
     ...(config || { enabledProjects: [], enabledIssueTypes: [] }),
+    // Make the first-run default explicit for every consumer. The issue panel
+    // uses the same rule: only an explicitly saved false restricts eligibility.
+    enableAll: config?.enableAll !== false,
     monthWorkingHours,
     managerUsers: config?.managerUsers || [],
     managerGroups: config?.managerGroups || [],

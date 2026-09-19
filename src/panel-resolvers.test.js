@@ -53,6 +53,45 @@ describe('panelResolver', () => {
     expect(result.currentAssigneeAccountId).toBe('suggested-user');
   });
 
+  it('enables all projects on a fresh installation without saved configuration', async () => {
+    kvs.get.mockResolvedValueOnce(undefined);
+    api.requestJira
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ fields: { assignee: { accountId: 'employee-001' } } }),
+      });
+
+    const result = await invoke('getPanelData');
+
+    expect(result.eligible).toBe(true);
+  });
+
+  it('defaults older partial configurations to all projects', async () => {
+    kvs.get.mockResolvedValueOnce({ managerUsers: ['manager-001'] });
+    api.requestJira
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ fields: { assignee: { accountId: 'employee-001' } } }),
+      });
+
+    const result = await invoke('getPanelData');
+
+    expect(result.eligible).toBe(true);
+  });
+
+  it('respects an explicitly restricted project configuration', async () => {
+    kvs.get.mockResolvedValueOnce({ enableAll: false, enabledProjects: ['another-project'] });
+    api.requestJira.mockResolvedValue({ ok: false });
+
+    const result = await invoke('getPanelData');
+
+    expect(result.eligible).toBe(false);
+  });
+
   it('rejects malformed months before making Jira writes', async () => {
     const result = await invoke('saveKupData', { kupMonth: 'March 2026', kupHours: 8 });
 

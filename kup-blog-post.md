@@ -36,11 +36,11 @@ The mistakes that get companies into trouble tend to cluster into a handful of p
 
 **Employee reporting errors.** Employees submitting work that isn't genuinely creative, or re-submitting the same work twice. *The fix:* a clear submission step plus verification by someone qualified to judge whether the work actually qualifies.
 
-**Archiving errors.** This is the big one. Authorities increasingly ask companies to produce evidence of the specific works created in specific months — sometimes years later. If you can't retrieve it, you can't defend it. Improper or missing archiving makes that impossible. *The fix:* a reliable, per-month record of created works, with verified entries that can't quietly disappear, so any given month can be reconstructed on demand.
+**Archiving errors.** This is the big one. Authorities increasingly ask companies to produce evidence of the specific works created in specific months — sometimes years later. If you can't retrieve it, you can't defend it. Improper or missing archiving makes that impossible. *The fix:* a reliable, per-month record of created works, stored with the work it describes so a given month can be retrieved when needed.
 
 **Acceptance errors.** Approving creative work without any real review, or having approvers who don't understand the rules. *The fix:* a defined acceptance process and trained reviewers, so approval means something.
 
-Across every one of these, the same theme repeats: **you need a defensible, time-stamped record of who created what, when, and that it was reviewed.** Get that right and the audit becomes a formality. Get it wrong and even a legitimate program becomes a liability.
+Across every one of these, the same theme repeats: **you need a structured record of who created what, when, and whether it was reviewed.** Get that right and the audit becomes easier to support. Get it wrong and even a legitimate program becomes a liability.
 
 ## Where the plugin comes in
 
@@ -48,9 +48,9 @@ Here's the practical problem: the creative work that qualifies for 50% KUP is ov
 
 Our Jira plugin closes that gap by keeping the compliance record right next to the work itself.
 
-It lets administrators define which projects, issue types, and months are in scope, so eligibility rules are enforced rather than assumed. On each issue, a compliance panel records the qualifying work and writes it to a per-issue audit trail — every entry time-stamped and attributable. A reporting page aggregates each person's compliance hours by month, turning "can you prove what was created in March?" from a frantic search into a single query. Because the data is stored as indexed properties on the issues themselves, the monthly record is structured, queryable, and lives where your engineers already are — no parallel paperwork, no end-of-quarter reconstruction.
+It lets administrators define which projects and issue types are in scope, while employees select the relevant year and month when recording their hours. On each issue, a compliance panel stores the KUP month, hours, owner, and approval status alongside a recent, time-stamped activity history. A reporting page aggregates each person's compliance hours by month, turning "what was recorded in March?" from a frantic search into a single query. Because the core KUP data is stored as indexed properties on the issues themselves, the monthly record is structured, queryable, and lives where your engineers already are — no parallel paperwork or end-of-quarter reconstruction.
 
-In other words, it operationalizes exactly the best practices that keep companies out of trouble: documented creative output, per-month archiving, verifiable records, and a defensible audit trail — built into the tool your team already uses every day.
+In other words, it supports the practices that make a KUP process easier to operate and review: documented creative output, monthly records, manager approval, and a recent history of changes — built into the tool your team already uses every day. The KUP record remains on the Jira issue; the activity history is intentionally limited to the most recent 50 changes per issue and 500 approval actions per month.
 
 ## The takeaway
 

@@ -10,11 +10,11 @@ It is built for the Polish *honorarium autorskie* model, where part of an employ
 
 ## What it does
 
-- **Per-issue logging** — on eligible Jira issues, an issue-panel lets the assignee record how many KUP (creative) hours that issue represents for a given month, with a full change audit trail.
+- **Per-issue logging** — on eligible Jira issues, an issue panel lets the assignee record how many KUP (creative) hours that issue represents for a given month, with a recent history of changes.
 - **Personal report** — each employee sees their monthly KUP total, their effective working-hour base (with absence/overtime adjustments), their KUP %, and whether they're within the company limit.
 - **Manager approval** — managers review each report-ee's monthly hours, approve/unapprove in bulk, filter by Jira group or a custom team, and see over-limit flags. Approval locks further edits.
 - **Payroll export** — managers/admins generate a per-employee monthly payroll summary (Excel or CSV) in the background, suitable for handing to accounting.
-- **Audit log** — a central, chronological record of every approval/unapproval action per month, viewable in-app and exportable to CSV.
+- **Audit log** — a central, chronological record of recent approval/unapproval actions per month, viewable in-app and exportable to CSV.
 
 ---
 

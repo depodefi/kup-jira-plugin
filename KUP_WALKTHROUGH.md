@@ -71,7 +71,7 @@ Pivoted from manual Custom Fields to a **zero-setup Issue Context Panel** that a
 **Features Built:**
 - Validates issue (`projectId`, `issueTypeId`) against configuration before rendering.
 - Stores KUP Month, KUP Hours, and the assignee account ID as **Issue Entity Properties** (`kup-data`). Before approval, saving after reassignment refreshes the owner; reports never move hours merely because Jira's assignee changed.
-- **Tamper-proof Audit Log:** Every save action appends to a hidden array (`kup-audit-log`).
+- **Issue Activity Log:** Changes are appended to `kup-audit-log`, which retains the 50 most recent entries for the issue.
 - **Activity Display:** Renders a beautiful chronological list natively inside the panel, utilizing the Atlassian `<User>` component to instantly render user avatars and full display names based on Account IDs.
 
 ---

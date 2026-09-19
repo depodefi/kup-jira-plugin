@@ -68,7 +68,7 @@ Make your changes and click **Save** at the bottom. The page tracks unsaved chan
 
 Controls **where the KUP panel appears** and which issues can carry KUP hours.
 
-- **Enable for all projects & issue types** — the simplest setup. When on, the KUP panel appears on every issue.
+- **Enable for all projects & issue types** — the default on a new installation. The KUP panel works on every issue immediately, without requiring an administrator to save the configuration first.
 - To scope it down, turn that off and pick specific **projects**. Optionally, per project, restrict to specific **issue types** (leave issue types empty to allow all types in that project).
 
 ### 2. KUP periods
