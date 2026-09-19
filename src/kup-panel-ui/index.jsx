@@ -20,7 +20,10 @@ const KupPanel = () => {
   const [eligible, setEligible] = useState(false);
   const [kupMonth, setKupMonth] = useState(null);
   const [kupHours, setKupHours] = useState('');
+  const [employeeAccountId, setEmployeeAccountId] = useState(null);
+  const [currentAssigneeAccountId, setCurrentAssigneeAccountId] = useState(null);
   const [auditLog, setAuditLog] = useState(null); // null = not yet loaded
+  const [showAuditLog, setShowAuditLog] = useState(false);
   const [message, setMessage] = useState(null);
   const [approval, setApproval] = useState(null);
   const [globalPagePath, setGlobalPagePath] = useState(null);
@@ -43,6 +46,8 @@ const KupPanel = () => {
       if (data.kupData) {
         setKupHours(data.kupData.kupHours != null ? String(data.kupData.kupHours) : '');
       }
+      setEmployeeAccountId(data.kupData?.employeeAccountId || data.currentAssigneeAccountId || null);
+      setCurrentAssigneeAccountId(data.currentAssigneeAccountId || null);
 
       setApproval(data.approval || null);
       setGlobalPagePath(data.globalPagePath || null);
@@ -56,13 +61,13 @@ const KupPanel = () => {
 
   // Phase 2: load audit log after form is visible
   useEffect(() => {
-    if (!eligible) return;
+    if (!eligible || !showAuditLog || auditLog !== null) return;
     invoke('getAuditLog').then((data) => {
       setAuditLog(data.auditLog || []);
     }).catch(() => {
       setAuditLog([]);
     });
-  }, [eligible]);
+  }, [eligible, showAuditLog, auditLog]);
 
   // Handle explicit save action
   const handleSave = async () => {
@@ -78,6 +83,8 @@ const KupPanel = () => {
       const result = await invoke('saveKupData', payload);
       if (result.success) {
         setMessage({ type: 'success', text: 'KUP data saved successfully.' });
+        setEmployeeAccountId(result.kupData?.employeeAccountId || employeeAccountId);
+        setCurrentAssigneeAccountId(result.kupData?.employeeAccountId || currentAssigneeAccountId);
         if (result.auditLog) setAuditLog(result.auditLog);
       } else {
         setMessage({ type: 'error', text: result.error || 'Failed to save.' });
@@ -183,6 +190,21 @@ const KupPanel = () => {
         )}
 
         {/* KUP Month selector */}
+        {employeeAccountId && (
+          <Inline space="space.050" alignBlock="center">
+            <Text>KUP hours attributed to</Text>
+            <User accountId={employeeAccountId} />
+          </Inline>
+        )}
+        {!isApproved && employeeAccountId && currentAssigneeAccountId
+          && employeeAccountId !== currentAssigneeAccountId && (
+          <SectionMessage appearance="warning" title="Assignee changed">
+            <Inline space="space.050" alignBlock="center">
+              <Text>Saving will move these KUP hours to the current assignee:</Text>
+              <User accountId={currentAssigneeAccountId} />
+            </Inline>
+          </SectionMessage>
+        )}
         <Box>
           <PeriodPicker id="kup-period" value={kupMonth} onChange={setKupMonth} isDisabled={isApproved} />
         </Box>
@@ -223,12 +245,17 @@ const KupPanel = () => {
 
         {/* Compliance Audit Trail — loads after form is visible */}
         <Box paddingBlockStart="space.300">
-          <Heading size="xsmall">Compliance Activity</Heading>
-          {auditLog === null && <Spinner size="small" />}
-          {auditLog !== null && auditLog.length === 0 && (
+          <Inline spread="space-between" alignBlock="center">
+            <Heading size="xsmall">Compliance Activity</Heading>
+            <Button appearance="subtle" onClick={() => setShowAuditLog(current => !current)}>
+              {showAuditLog ? 'Hide activity' : 'Show activity'}
+            </Button>
+          </Inline>
+          {showAuditLog && auditLog === null && <Spinner size="small" />}
+          {showAuditLog && auditLog !== null && auditLog.length === 0 && (
             <Text>No activity recorded yet.</Text>
           )}
-          {auditLog !== null && auditLog.length > 0 && (
+          {showAuditLog && auditLog !== null && auditLog.length > 0 && (
             <Stack space="space.100">
               {auditLog.slice().reverse().map((entry, idx) => {
                 const date = new Date(entry.timestamp);
@@ -236,9 +263,10 @@ const KupPanel = () => {
                   day: '2-digit', month: 'short', year: 'numeric',
                   hour: '2-digit', minute: '2-digit'
                 });
-                const changeDescs = Object.entries(entry.changes).map(
-                  ([field, diff]) => `${field}: ${diff.from || '—'} → ${diff.to || '—'}`
-                );
+                const fieldLabels = {
+                  kupMonth: 'KUP period',
+                  kupHours: 'KUP hours',
+                };
 
                 return (
                   <Box key={idx} padding="space.100">
@@ -249,8 +277,19 @@ const KupPanel = () => {
                           ? <User accountId={entry.userId} />
                           : <Strong>{entry.userName || 'Unknown user'}</Strong>}
                       </Inline>
-                      {changeDescs.map((desc, i) => (
-                        <Text key={i}>  • {desc}</Text>
+                      {Object.entries(entry.changes).map(([field, diff]) => (
+                        field === 'employeeAccountId' ? (
+                          <Inline key={field} space="space.050" alignBlock="center">
+                            <Text>• KUP hours owner:</Text>
+                            {diff.from ? <User accountId={diff.from} /> : <Text>—</Text>}
+                            <Text>→</Text>
+                            {diff.to ? <User accountId={diff.to} /> : <Text>—</Text>}
+                          </Inline>
+                        ) : (
+                          <Text key={field}>
+                            • {fieldLabels[field] || field}: {diff.from ?? '—'} → {diff.to ?? '—'}
+                          </Text>
+                        )
                       ))}
                     </Stack>
                   </Box>

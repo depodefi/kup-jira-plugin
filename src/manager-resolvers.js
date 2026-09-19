@@ -93,7 +93,7 @@ async function fetchGroupMemberIds(groupId, requestId, month) {
 
 /**
  * getManagerReport: Returns KUP data for all users matching the given month,
- * grouped by assignee, with optional group/team filtering.
+ * grouped by the employee captured on first save, with optional filtering.
  */
 managerResolver.define('getManagerReport', async ({ payload, context }) => {
   const requestId = createRequestId();
@@ -122,7 +122,7 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
   while (true) {
     const requestBody = {
       jql,
-      fields: ['summary', 'assignee'],
+      fields: ['summary'],
       properties: ['kup-data', 'kup-approval'],
       maxResults,
     };
@@ -154,13 +154,16 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
     if (!data.nextPageToken || data.issues.length < maxResults) break;
     nextPageToken = data.nextPageToken;
   }
-  // Group issues by assignee accountId
+  // Group by the immutable attribution stored with the KUP record. Records
+  // created before this field existed remain visible as unattributed instead
+  // of being silently assigned to the issue's current assignee.
   const userMap = {};
   const unassignedIssues = [];
   for (const issue of allIssues) {
-    const assignee = issue.fields?.assignee;
-    if (!assignee) {
-      const kupData = (issue.properties || {})['kup-data'] || {};
+    const props = issue.properties || {};
+    const kupData = props['kup-data'] || {};
+    const uid = kupData.employeeAccountId;
+    if (!uid) {
       unassignedIssues.push({
         key: issue.key,
         summary: issue.fields?.summary || '',
@@ -169,9 +172,6 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
       continue;
     }
 
-    const uid = assignee.accountId;
-    const props = issue.properties || {};
-    const kupData = props['kup-data'] || {};
     const kupApproval = props['kup-approval'] || {};
     const hours = parseFloat(kupData.kupHours) || 0;
     const issueStatus = kupApproval.status || 'pending';
@@ -179,7 +179,7 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
     if (!userMap[uid]) {
       userMap[uid] = {
         accountId: uid,
-        displayName: assignee.displayName || uid,
+        displayName: uid,
         totalHours: 0,
         issueCount: 0,
         issues: [],
@@ -219,6 +219,13 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
         if (!memberIds.has(uid)) delete userMap[uid];
       }
     }
+  }
+
+  // Names are presentation data: resolve them live and never persist them in
+  // issue properties, exports, or the app's privacy registry.
+  const employeeNames = await resolveUserNames(Object.keys(userMap));
+  for (const [uid, user] of Object.entries(userMap)) {
+    user.displayName = employeeNames.get(uid) || 'Former user';
   }
 
   // Compute per-user aggregate status
@@ -266,7 +273,7 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
   }
 
   // Find all issues for the target user + month
-  const jql = `assignee = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
+  const jql = `issue.property[kup-data].employeeAccountId = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
   const res = await api.asApp().requestJira(route`/rest/api/3/search/jql`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -394,7 +401,7 @@ managerResolver.define('bulkUnapprove', async ({ payload, context }) => {
     return { success: false, error: 'Invalid account ID' };
   }
 
-  const jql = `assignee = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
+  const jql = `issue.property[kup-data].employeeAccountId = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
   const res = await api.asApp().requestJira(route`/rest/api/3/search/jql`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -495,7 +502,7 @@ managerResolver.define('getMyKupReport', async ({ payload, context }) => {
   if (!MONTH_REGEX.test(month)) return { issues: [], totalHours: 0, maxWorkingHours: null };
 
   const accountId = context.accountId;
-  const jql = `assignee = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
+  const jql = `issue.property[kup-data].employeeAccountId = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
 
   try {
     const res = await api.asApp().requestJira(route`/rest/api/3/search/jql`, {
@@ -676,7 +683,7 @@ managerResolver.define('saveMyAdjustment', async ({ payload, context }) => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      jql: `assignee = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`,
+      jql: `issue.property[kup-data].employeeAccountId = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`,
       fields: [],
       properties: ['kup-approval'],
       maxResults: 100,

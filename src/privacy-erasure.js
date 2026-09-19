@@ -97,7 +97,7 @@ async function eraseAccountFromIssues(accountId) {
       body: JSON.stringify({
         jql: 'issue.property[kup-data].kupMonth IS NOT EMPTY',
         fields: ['assignee'],
-        properties: ['kup-approval', 'kup-audit-log'],
+        properties: ['kup-data', 'kup-approval', 'kup-audit-log'],
         maxResults: 100,
         ...(nextPageToken ? { nextPageToken } : {}),
       }),
@@ -106,8 +106,10 @@ async function eraseAccountFromIssues(accountId) {
 
     const data = await response.json();
     for (const issue of data.issues || []) {
-      const assigneeId = issue.fields?.assignee?.accountId;
-      if (assigneeId === accountId) {
+      const properties = issue.properties || {};
+      const attributedEmployeeId = properties['kup-data']?.employeeAccountId
+        || issue.fields?.assignee?.accountId;
+      if (attributedEmployeeId === accountId) {
         await Promise.all(['kup-data', 'kup-approval', 'kup-audit-log'].map(async property => {
           const deletion = await api.asApp().requestJira(
             route`/rest/api/3/issue/${issue.key}/properties/${property}`,
@@ -120,7 +122,6 @@ async function eraseAccountFromIssues(accountId) {
         continue;
       }
 
-      const properties = issue.properties || {};
       const approval = properties['kup-approval'];
       if (approval?.approvedBy === accountId) {
         await api.asApp().requestJira(route`/rest/api/3/issue/${issue.key}/properties/kup-approval`, {
@@ -131,7 +132,12 @@ async function eraseAccountFromIssues(accountId) {
       }
       const auditLog = properties['kup-audit-log'];
       if (Array.isArray(auditLog)) {
-        const retainedEntries = auditLog.filter(entry => entry?.userId !== accountId);
+        const retainedEntries = auditLog.filter(entry => {
+          const ownerChange = entry?.changes?.employeeAccountId;
+          return entry?.userId !== accountId
+            && ownerChange?.from !== accountId
+            && ownerChange?.to !== accountId;
+        });
         if (retainedEntries.length !== auditLog.length) {
           await api.asApp().requestJira(route`/rest/api/3/issue/${issue.key}/properties/kup-audit-log`, {
             method: 'PUT',

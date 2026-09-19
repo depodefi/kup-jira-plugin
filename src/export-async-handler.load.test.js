@@ -24,6 +24,10 @@ jest.mock('@forge/kvs', () => {
   };
 });
 
+jest.mock('./user-names.js', () => ({
+  resolveUserNames: jest.fn(async accountIds => new Map(accountIds.map(id => [id, id]))),
+}));
+
 /**
  * This is intentionally a Jest load test rather than a live Jira benchmark.
  * It exercises the complete export aggregation and pagination path with a
@@ -49,7 +53,7 @@ describe('exportAsyncHandler load profile', () => {
           },
         },
         properties: {
-          'kup-data': { kupHours: 2 },
+          'kup-data': { kupHours: 2, employeeAccountId: `employee-${employeeNumber}` },
           'kup-approval': { status: 'approved' },
         },
       };

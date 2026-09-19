@@ -70,7 +70,7 @@ Pivoted from manual Custom Fields to a **zero-setup Issue Context Panel** that a
 
 **Features Built:**
 - Validates issue (`projectId`, `issueTypeId`) against configuration before rendering.
-- Stores KUP Month and KUP Hours as **Issue Entity Properties** (`kup-data`), keeping them perfectly searchable via JQL while avoiding Jira's restrictive Screen Configurations.
+- Stores KUP Month, KUP Hours, and the assignee account ID as **Issue Entity Properties** (`kup-data`). Before approval, saving after reassignment refreshes the owner; reports never move hours merely because Jira's assignee changed.
 - **Tamper-proof Audit Log:** Every save action appends to a hidden array (`kup-audit-log`).
 - **Activity Display:** Renders a beautiful chronological list natively inside the panel, utilizing the Atlassian `<User>` component to instantly render user avatars and full display names based on Account IDs.
 
@@ -82,7 +82,7 @@ A dedicated, personal reporting page accessible from the Jira "Apps" menu.
 
 **Features Built:**
 - **JQL Property Searching:** Uses optimized JQL (`issue.property[kup-data].kupMonth = "..."`) to fetch issues.
-- **Privacy-First (asApp):** Executed via `asApp()` to minimize "Allow access" prompts while still filtering for `assignee = currentUser()`.
+- **Privacy-aware attribution:** Reports filter by the stored employee account ID. Display names are resolved live, while account IDs participate in Atlassian personal-data reporting and erasure.
 - **Dynamic Calculation:** Automatically sums the `kupHours` from all returned issues.
 - **Native Table Rendering:** Uses Forge `<DynamicTable>` for a high-performance, responsive experience.
 

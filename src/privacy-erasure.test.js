@@ -76,4 +76,60 @@ describe('erasePersonalData', () => {
     );
     expect(kvs.delete).toHaveBeenCalledWith('kup_privacy_account_closed-user');
   });
+
+  it('erases attributed hours after the Jira issue is reassigned', async () => {
+    kvs.get.mockResolvedValue({ managerUsers: [] });
+    api.requestJira
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          issues: [{
+            key: 'KUP-2',
+            fields: { assignee: { accountId: 'replacement-user' } },
+            properties: {
+              'kup-data': { kupMonth: '2026-09', kupHours: 8, employeeAccountId: 'closed-user' },
+            },
+          }],
+          nextPageToken: undefined,
+        }),
+      })
+      .mockResolvedValue({ ok: true, status: 204 });
+
+    await erasePersonalData('closed-user');
+
+    expect(api.requestJira).toHaveBeenCalledWith(
+      '/rest/api/3/issue/KUP-2/properties/kup-data',
+      { method: 'DELETE' },
+    );
+  });
+
+  it('removes audit entries that reference a former KUP owner', async () => {
+    kvs.get.mockResolvedValue({ managerUsers: [] });
+    api.requestJira
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          issues: [{
+            key: 'KUP-3',
+            fields: { assignee: { accountId: 'replacement-user' } },
+            properties: {
+              'kup-data': { employeeAccountId: 'replacement-user' },
+              'kup-audit-log': [{
+                userId: 'editor-user',
+                changes: { employeeAccountId: { from: 'closed-user', to: 'replacement-user' } },
+              }],
+            },
+          }],
+          nextPageToken: undefined,
+        }),
+      })
+      .mockResolvedValue({ ok: true, status: 200 });
+
+    await erasePersonalData('closed-user');
+
+    expect(api.requestJira).toHaveBeenCalledWith(
+      '/rest/api/3/issue/KUP-3/properties/kup-audit-log',
+      expect.objectContaining({ method: 'PUT', body: '[]' }),
+    );
+  });
 });

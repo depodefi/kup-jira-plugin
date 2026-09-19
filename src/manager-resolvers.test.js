@@ -1,6 +1,7 @@
 import { managerHandler } from './manager-resolvers';
 import api from '@forge/api';
 import kvs from '@forge/kvs';
+import { resolveUserNames } from './user-names.js';
 
 jest.mock('@forge/api', () => ({
   getAppContext: () => ({ environmentType: 'DEVELOPMENT' }),
@@ -17,6 +18,12 @@ jest.mock('@forge/kvs', () => {
     WhereConditions: { equalTo: jest.fn(v => v) },
   };
 });
+
+jest.mock('./user-names.js', () => ({
+  resolveUserNames: jest.fn(async accountIds => new Map(
+    accountIds.map(accountId => [accountId, accountId === 'dev-001' ? 'Alice' : accountId === 'dev-002' ? 'Bob' : accountId])
+  )),
+}));
 
 // Config and approval logs now live in @forge/kvs; existing tests reference it as `storage`.
 const storage = kvs;
@@ -81,24 +88,29 @@ describe('managerResolver', () => {
         issues: [
           {
             key: 'PROJ-1',
-            fields: { summary: 'Task A', assignee: { accountId: 'dev-001', displayName: 'Alice' } },
-            properties: { 'kup-data': { kupHours: 8 }, 'kup-approval': { status: 'approved' } },
+            // Reassignment must not move historical hours away from dev-001.
+            fields: { summary: 'Task A', assignee: { accountId: 'replacement-user', displayName: 'Replacement' } },
+            properties: { 'kup-data': { kupHours: 8, employeeAccountId: 'dev-001' }, 'kup-approval': { status: 'approved' } },
           },
           {
             key: 'PROJ-2',
             fields: { summary: 'Task B', assignee: { accountId: 'dev-001', displayName: 'Alice' } },
-            properties: { 'kup-data': { kupHours: 4 }, 'kup-approval': { status: 'pending' } },
+            properties: { 'kup-data': { kupHours: 4, employeeAccountId: 'dev-001' }, 'kup-approval': { status: 'pending' } },
           },
           {
             key: 'PROJ-3',
             fields: { summary: 'Task C', assignee: { accountId: 'dev-002', displayName: 'Bob' } },
-            properties: { 'kup-data': { kupHours: 16 }, 'kup-approval': { status: 'approved' } },
+            properties: { 'kup-data': { kupHours: 16, employeeAccountId: 'dev-002' }, 'kup-approval': { status: 'approved' } },
           },
         ],
       }),
     });
 
     const result = await invoke('getManagerReport', { month: '2026-03' });
+
+    const searchBody = JSON.parse(api.requestJira.mock.calls[0][1].body);
+    expect(searchBody.jql).toContain('issue.property[kup-data].kupMonth = "2026-03"');
+    expect(searchBody.jql).not.toContain('assignee =');
 
     expect(result.month).toBe('2026-03');
     expect(result.maxWorkingHours).toBe(176);
@@ -133,12 +145,12 @@ describe('managerResolver', () => {
             {
               key: 'PROJ-1',
               fields: { summary: 'Task A', assignee: { accountId: 'dev-001', displayName: 'Alice' } },
-              properties: { 'kup-data': { kupHours: 8 }, 'kup-approval': { status: 'pending' } },
+              properties: { 'kup-data': { kupHours: 8, employeeAccountId: 'dev-001' }, 'kup-approval': { status: 'pending' } },
             },
             {
               key: 'PROJ-2',
               fields: { summary: 'Task B', assignee: { accountId: 'dev-002', displayName: 'Bob' } },
-              properties: { 'kup-data': { kupHours: 4 }, 'kup-approval': { status: 'pending' } },
+              properties: { 'kup-data': { kupHours: 4, employeeAccountId: 'dev-002' }, 'kup-approval': { status: 'pending' } },
             },
           ],
         }),
@@ -176,12 +188,12 @@ describe('managerResolver', () => {
           {
             key: 'PROJ-1',
             fields: { summary: 'Task A', assignee: { accountId: 'dev-001', displayName: 'Alice' } },
-            properties: { 'kup-data': { kupHours: 5 }, 'kup-approval': { status: 'pending' } },
+            properties: { 'kup-data': { kupHours: 5, employeeAccountId: 'dev-001' }, 'kup-approval': { status: 'pending' } },
           },
           {
             key: 'PROJ-2',
             fields: { summary: 'Task B', assignee: { accountId: 'dev-001', displayName: 'Alice' } },
-            properties: { 'kup-data': { kupHours: 3 }, 'kup-approval': { status: 'pending' } },
+            properties: { 'kup-data': { kupHours: 3, employeeAccountId: 'dev-001' }, 'kup-approval': { status: 'pending' } },
           },
         ],
       }),
@@ -419,12 +431,10 @@ describe('managerResolver', () => {
         { action: 'approval', managerId: 'mgr-1', targetUserId: 'emp-1', month: '2026-03', issueCount: 2, issueKeys: ['P-1', 'P-2'], timestamp: '2026-03-10T09:00:00Z' },
       ]);
 
-    // resolveUserNames issues one /user lookup per unique account ID
-    api.requestJira.mockImplementation((url) => {
-      if (url.includes('mgr-1')) return Promise.resolve({ ok: true, json: async () => ({ displayName: 'Manager Mike' }) });
-      if (url.includes('emp-1')) return Promise.resolve({ ok: true, json: async () => ({ displayName: 'Alice Chen' }) });
-      return Promise.resolve({ ok: false });
-    });
+    resolveUserNames.mockResolvedValueOnce(new Map([
+      ['mgr-1', 'Manager Mike'],
+      ['emp-1', 'Alice Chen'],
+    ]));
 
     const result = await invoke('getApprovalAuditLog', { month: '2026-03' });
 
@@ -443,10 +453,10 @@ describe('managerResolver', () => {
         { action: 'unapproval', managerId: 'mgr-1', targetUserId: 'gone-1', month: '2026-03', issueCount: 1, issueKeys: ['P-9'], timestamp: '2026-03-11T09:00:00Z' },
       ]);
 
-    api.requestJira.mockImplementation((url) => {
-      if (url.includes('mgr-1')) return Promise.resolve({ ok: true, json: async () => ({ displayName: 'Manager Mike' }) });
-      return Promise.resolve({ ok: false }); // gone-1 no longer exists
-    });
+    resolveUserNames.mockResolvedValueOnce(new Map([
+      ['mgr-1', 'Manager Mike'],
+      ['gone-1', 'Former user'],
+    ]));
 
     const result = await invoke('getApprovalAuditLog', { month: '2026-03' });
     expect(result.entries[0].targetUserName).toBe('Former user');

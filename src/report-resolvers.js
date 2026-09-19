@@ -14,7 +14,7 @@ kupReportResolver.define('getAvailableMonths', async () => {
   return defaultAvailableMonths();
 });
 
-// 2. Run JQL to fetch all issues assigned to current user matching the specified month
+// 2. Fetch records attributed to the current user when they were first saved.
 kupReportResolver.define('getMyKupReport', async ({ payload, context }) => {
   const { month } = payload;
   if (!month || !MONTH_REGEX.test(month)) {
@@ -22,7 +22,7 @@ kupReportResolver.define('getMyKupReport', async ({ payload, context }) => {
   }
 
   const accountId = context.accountId;
-  const jql = `assignee = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
+  const jql = `issue.property[kup-data].employeeAccountId = "${accountId}" AND issue.property[kup-data].kupMonth = "${month}"`;
   
   try {
     // Using asApp() to avoid forcing every user to click "Allow access" just for the search

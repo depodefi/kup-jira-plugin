@@ -24,6 +24,10 @@ jest.mock('@forge/kvs', () => {
   };
 });
 
+jest.mock('./user-names.js', () => ({
+  resolveUserNames: jest.fn(async accountIds => new Map(accountIds.map(id => [id, 'Ada Lovelace']))),
+}));
+
 describe('exportAsyncHandler', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -56,7 +60,7 @@ describe('exportAsyncHandler', () => {
         issues: [{
           fields: { assignee: { accountId: 'employee-001', displayName: 'Ada Lovelace' } },
           properties: {
-            'kup-data': { kupHours: 8 },
+            'kup-data': { kupHours: 8, employeeAccountId: 'employee-001' },
             'kup-approval': { status: 'approved' },
           },
         }],

@@ -70,7 +70,7 @@ export async function seedPrivacyRegistry() {
       body: JSON.stringify({
         jql: 'issue.property[kup-data].kupMonth IS NOT EMPTY',
         fields: ['assignee'],
-        properties: ['kup-approval', 'kup-audit-log'],
+        properties: ['kup-data', 'kup-approval', 'kup-audit-log'],
         maxResults: 100,
         ...(nextPageToken ? { nextPageToken } : {}),
       }),
@@ -78,9 +78,15 @@ export async function seedPrivacyRegistry() {
     if (!response.ok) throw new Error(`Unable to discover stored KUP records (${response.status})`);
     const data = await response.json();
     (data.issues || []).forEach(issue => {
-      add(issue.fields?.assignee?.accountId);
+      // The property is authoritative. Current assignee is only a discovery
+      // fallback for records written before stable attribution was introduced.
+      add(issue.properties?.['kup-data']?.employeeAccountId || issue.fields?.assignee?.accountId);
       add(issue.properties?.['kup-approval']?.approvedBy);
-      (issue.properties?.['kup-audit-log'] || []).forEach(entry => add(entry.userId));
+      (issue.properties?.['kup-audit-log'] || []).forEach(entry => {
+        add(entry.userId);
+        add(entry.changes?.employeeAccountId?.from);
+        add(entry.changes?.employeeAccountId?.to);
+      });
     });
     nextPageToken = data.nextPageToken;
   } while (nextPageToken);

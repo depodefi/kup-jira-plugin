@@ -144,7 +144,7 @@ Managers work from the global **KUP Compliance** page. Open it from the Jira top
 | **Status** | *Pending*, *Approved*, or *Mixed*; an **Over limit** lozenge appears if over the cap. |
 | **Action** | Approve / Unapprove. |
 
-Below the table you'll also see any **Unassigned Issues** — issues that have KUP hours logged but no assignee, so someone needs to claim them.
+Below the table you'll also see any **Unattributed Issues** created before stable employee attribution was available. New KUP entries require an assignee and capture that employee on first save.
 
 ### Approving and un-approving
 
@@ -245,6 +245,9 @@ Your account isn't listed as a manager. Ask your admin to add you as a *Manager 
 
 **The export shows "Former user" as an approver.**
 That person's Jira account has been deactivated or removed. The app stores only account IDs and resolves names live, so departed accounts show as *Former user*.
+
+**What happens when an issue is reassigned?**
+The KUP hours owner is always the Jira assignee. Reassigning the issue does not silently move historical hours: before approval, open the panel and save the KUP data to update its owner to the new assignee. The change is audited. Approved data must first be unapproved. The stored account ID is included in Atlassian personal-data reporting and erasure; display names are resolved live and are not stored in the KUP record.
 
 **Do export files linger in storage?**
 No. A downloaded export is deleted immediately, and any un-downloaded one is auto-removed after one hour.

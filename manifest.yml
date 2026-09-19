@@ -25,6 +25,10 @@ modules:
           type: string
         - path: kupHours
           type: number
+        # Stable attribution captured on first save. Reports query this value
+        # instead of the issue's mutable current assignee.
+        - path: employeeAccountId
+          type: string
     - key: kup-approval-indexing
       entity: issue
       propertyKey: kup-approval

@@ -898,10 +898,11 @@ const ManagerApprovalView = () => {
         </Stack>
       </Box>
 
-      {/* Unassigned issues */}
+      {/* Legacy records without stable employee attribution */}
       {!fetching && reportData?.unassignedIssues?.length > 0 && (
         <Stack space="space.200">
-          <Heading size="small">Unassigned Issues ({reportData.unassignedIssues.length})</Heading>
+          <Heading size="small">Unattributed Records ({reportData.unassignedIssues.length})</Heading>
+          <Text>These records were created before employee attribution was stored. Review them before approval or export.</Text>
           <SectionMessage appearance="warning">
             <Text>These issues have KUP hours logged but no assignee. Ping someone to claim them.</Text>
           </SectionMessage>

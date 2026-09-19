@@ -55,10 +55,14 @@ panelResolver.define('getPanelData', async ({ context }) => {
   if (!issueId) return { eligible: false };
 
   // Fetch config and issue properties all at once — no sequential dependency
-  const [config, kupDataRes, approvalRes] = await Promise.all([
+  const [config, kupDataRes, approvalRes, issueRes] = await Promise.all([
     kvs.get('kup_config'),
     api.asApp().requestJira(route`/rest/api/3/issue/${issueId}/properties/kup-data`).catch(() => null),
     api.asApp().requestJira(route`/rest/api/3/issue/${issueId}/properties/kup-approval`).catch(() => null),
+    // Assignee is read in the viewing user's permission context. This handles
+    // issue-security schemes where the user can see an issue but the app user
+    // cannot, and avoids falsely treating a visible assignee as missing.
+    api.asUser().requestJira(route`/rest/api/3/issue/${issueId}?fields=assignee`).catch(() => null),
   ]);
 
   // Eligibility check uses context values — no extra API call required
@@ -69,12 +73,20 @@ panelResolver.define('getPanelData', async ({ context }) => {
 
   const kupData = kupDataRes?.ok ? (await kupDataRes.json()).value || null : null;
   const approval = approvalRes?.ok ? (await approvalRes.json()).value || null : null;
+  const issue = issueRes?.ok ? await issueRes.json() : null;
+  const currentAssigneeAccountId = issue?.fields?.assignee?.accountId || null;
+  if (!issueRes?.ok) {
+    logSafe('warn', 'getPanelData.assignee', {
+      httpStatus: issueRes?.status,
+      status: 'jira_error',
+    });
+  }
 
   const appId = resolveAppId(context);
   const envId = context.environmentId;
   const globalPagePath = appId && envId ? `/jira/apps/${appId}/${envId}` : null;
 
-  return { eligible: true, kupData, approval, globalPagePath };
+  return { eligible: true, kupData, approval, currentAssigneeAccountId, globalPagePath };
 });
 
 /**
@@ -153,8 +165,22 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
       // No existing data, default oldData is fine
     }
 
-    // 3. Save the new KUP data as an Issue Entity Property
-    const newData = { kupMonth, kupHours: parsedHours };
+    // 3. The current Jira assignee is the only valid owner. A save performed
+    // before approval intentionally refreshes the stored attribution after an
+    // issue reassignment; reports never infer it later without an explicit save.
+    const issueRes = await api.asUser().requestJira(
+      route`/rest/api/3/issue/${issueId}?fields=assignee`
+    );
+    if (!issueRes.ok) {
+      return { success: false, error: 'Unable to determine the current assignee. Please try again.' };
+    }
+    const issue = await issueRes.json();
+    const employeeAccountId = issue.fields?.assignee?.accountId;
+    if (!employeeAccountId) {
+      return { success: false, error: 'Assign this issue before saving KUP data.' };
+    }
+
+    const newData = { kupMonth, kupHours: parsedHours, employeeAccountId };
     const saveRes = await api.asApp().requestJira(
       route`/rest/api/3/issue/${issueId}/properties/kup-data`,
       {
@@ -184,6 +210,12 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
     }
     if (oldData.kupHours !== newData.kupHours) {
       auditEntry.changes.kupHours = { from: oldData.kupHours, to: newData.kupHours };
+    }
+    if (oldData.employeeAccountId !== employeeAccountId) {
+      auditEntry.changes.employeeAccountId = {
+        from: oldData.employeeAccountId || null,
+        to: employeeAccountId,
+      };
     }
 
     // 5. Initialize kup-approval on first save (status is guaranteed pending at this point)
@@ -232,10 +264,10 @@ panelResolver.define('saveKupData', async ({ payload, context }) => {
       );
     }
 
-    // The audit record links this KUP entry to the acting Jira account. Add
-    // that account to the privacy registry only after every related write has
-    // succeeded, so the registry never claims data that was not stored.
-    await trackPersonalData([accountId]);
+    // Both the employee attributed with the hours and the person performing
+    // the edit are covered by Atlassian's personal-data lifecycle. Register
+    // them only after all related writes have succeeded.
+    await trackPersonalData([accountId, employeeAccountId, oldData.employeeAccountId].filter(Boolean));
 
     return { success: true, kupData: newData, auditLog };
   } catch (err) {

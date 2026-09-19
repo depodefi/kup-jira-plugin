@@ -9,7 +9,8 @@ export const FORMER_USER = 'Former user';
  * or malformed accounts resolve to "Former user".
  *
  * Names are resolved live and never persisted — only the stable account ID is
- * stored, which keeps the app out of scope for personal-data retention (#19).
+ * stored. Account IDs remain personal data and are handled by the app's
+ * reporting and erasure lifecycle; live resolution avoids retaining names.
  */
 export async function resolveUserNames(accountIds) {
   const unique = [...new Set(

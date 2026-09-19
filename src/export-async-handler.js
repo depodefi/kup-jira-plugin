@@ -93,7 +93,7 @@ export async function exportAsyncHandler(event) {
     const extraFields = [];
     if (exportFieldMappings.employeeId) extraFields.push(exportFieldMappings.employeeId);
     if (exportFieldMappings.costCenter) extraFields.push(exportFieldMappings.costCenter);
-    const fieldsToFetch = ['assignee', ...extraFields];
+    const fieldsToFetch = [...extraFields];
 
     // 3. Paginate through all issues matching this month via cursor-based JQL
     const allIssues = [];
@@ -135,24 +135,20 @@ export async function exportAsyncHandler(event) {
       cursor = result.nextCursor;
     } while (cursor);
 
-    // 5. Group by assignee, sum KUP hours, collect approval statuses
+    // 5. Group by the employee captured when KUP data was first saved. The
+    // issue's current assignee may have changed and is not historical truth.
     const employeeMap = {};
     for (const issue of allIssues) {
-      const assignee = issue.fields?.assignee;
-      if (!assignee) continue;
-
-      const { accountId } = assignee;
       const kupData = (issue.properties || {})['kup-data'] || {};
+      const accountId = kupData.employeeAccountId;
+      if (!accountId) continue;
       const kupApproval = (issue.properties || {})['kup-approval'] || {};
       const hours = parseFloat(kupData.kupHours) || 0;
       if (hours === 0) continue;
 
       if (!employeeMap[accountId]) {
-        const parts = (assignee.displayName || '').split(' ');
         employeeMap[accountId] = {
           accountId,
-          firstName: parts[0] || '',
-          lastName: parts.slice(1).join(' ') || '',
           employeeId: exportFieldMappings.employeeId
             ? (issue.fields[exportFieldMappings.employeeId] ?? '')
             : undefined,
@@ -172,11 +168,13 @@ export async function exportAsyncHandler(event) {
       }
     }
 
-    // Resolve approver account IDs to display names live — names are never
-    // persisted on the approval property (#19).
-    const approverNames = await resolveUserNames(
-      Object.values(employeeMap).map(e => e.approverId)
-    );
+    // Resolve names live. Only stable account IDs are persisted, so profile
+    // changes and erasure requests are handled through Atlassian's lifecycle.
+    const employees = Object.values(employeeMap);
+    const names = await resolveUserNames([
+      ...employees.map(employee => employee.accountId),
+      ...employees.map(employee => employee.approverId),
+    ]);
 
     // 6. Compute final per-employee output rows
     const outputRows = Object.values(employeeMap).map(emp => {
@@ -196,12 +194,14 @@ export async function exportAsyncHandler(event) {
         ? (statuses.has('approved') ? 'Approved' : 'Pending')
         : 'Mixed';
 
+      const employeeName = names.get(emp.accountId) || 'Former user';
+      const nameParts = employeeName.split(' ');
       return {
-        firstName: emp.firstName,
-        lastName: emp.lastName,
+        firstName: nameParts[0] || '',
+        lastName: nameParts.slice(1).join(' ') || '',
         employeeId: emp.employeeId,
         costCenter: emp.costCenter,
-        approver: emp.approverId ? (approverNames.get(emp.approverId) || 'Former user') : '',
+        approver: emp.approverId ? (names.get(emp.approverId) || 'Former user') : '',
         workingHours,
         creativeHours: emp.creativeHours,
         cappedCreativeHours,
