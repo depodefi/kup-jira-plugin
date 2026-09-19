@@ -34,11 +34,11 @@ describe('exportAsyncHandler', () => {
     api.requestJira.mockRejectedValueOnce(new Error('sensitive Jira response details'));
 
     await exportAsyncHandler({
-      body: { month: '2026-03-KUP', format: 'csv', requestedBy: 'manager-001' },
+      body: { month: '2026-03', format: 'csv', requestedBy: 'manager-001' },
     });
 
     expect(kvs.set).toHaveBeenCalledWith(
-      'export_manager-001_2026-03-KUP',
+      'export_manager-001_2026-03',
       expect.objectContaining({
         status: 'error',
         message: 'The payroll export could not be generated. Please try again or contact an administrator.',
@@ -49,7 +49,7 @@ describe('exportAsyncHandler', () => {
   });
 
   it('generates an XLSX buffer without the vulnerable xlsx package', async () => {
-    kvs.get.mockResolvedValueOnce({ monthWorkingHours: { '2026-03-KUP': 176 } });
+    kvs.get.mockResolvedValueOnce({ monthWorkingHours: { '2026-03': 176 } });
     api.requestJira.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -64,12 +64,12 @@ describe('exportAsyncHandler', () => {
     });
 
     await exportAsyncHandler({
-      body: { month: '2026-03-KUP', format: 'xlsx', requestedBy: 'manager-001' },
+      body: { month: '2026-03', format: 'xlsx', requestedBy: 'manager-001' },
     });
 
     const storedExport = kvs.set.mock.calls[0][1];
     expect(storedExport.format).toBe('xlsx');
-    expect(storedExport.filename).toBe('KUP_Payroll_2026-03-KUP.xlsx');
+    expect(storedExport.filename).toBe('KUP_Payroll_2026-03.xlsx');
     // XLSX files are ZIP containers and therefore start with the PK signature.
     expect(Buffer.from(storedExport.data, 'base64').subarray(0, 2).toString()).toBe('PK');
   });

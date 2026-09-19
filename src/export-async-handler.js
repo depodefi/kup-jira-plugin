@@ -1,7 +1,7 @@
 import api, { route } from '@forge/api';
 import kvs, { WhereConditions } from '@forge/kvs';
 import writeExcelFile from 'write-excel-file/node';
-import { DEFAULT_WORKING_HOURS } from './kup-defaults.js';
+import { resolveWorkingHours } from './kup-defaults.js';
 import { resolveUserNames } from './user-names.js';
 import { createRequestId, logSafe, safeErrorCode } from './safe-logger.js';
 import { hasActiveLicense } from './license-guard.js';
@@ -83,7 +83,7 @@ export async function exportAsyncHandler(event) {
   try {
     // 1. Load config
     const config = await kvs.get('kup_config') ?? {};
-    const workingHoursMap = config.monthWorkingHours || DEFAULT_WORKING_HOURS;
+    const workingHoursMap = resolveWorkingHours(config);
     const baseWorkingHours = workingHoursMap[month] ?? 160;
     const exportFieldMappings = config.exportFieldMappings || {};
     const enableKupLimit = config.maxKupPercent != null;

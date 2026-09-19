@@ -4,16 +4,17 @@ import ForgeReconciler, {
   Text, Select, Toggle, Button, Box, Stack, Inline, Heading, SectionMessage, Label, DynamicTable, Textfield, UserPicker, Lozenge
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
+import { DEFAULT_WORKING_HOURS } from '../kup-defaults.js';
 
 /**
- * Generate all month strings from 2025-01-KUP to 2030-12-KUP.
- * This is the master list — the admin picks which ones are active.
+ * Generate all month strings from 2025-01 to 2030-12.
+ * Working-hour baselines only; these do not restrict selectable periods.
  */
 const ALL_MONTHS = [];
 for (let year = 2025; year <= 2030; year++) {
   for (let month = 1; month <= 12; month++) {
     const mm = String(month).padStart(2, '0');
-    ALL_MONTHS.push(`${year}-${mm}-KUP`);
+    ALL_MONTHS.push(`${year}-${mm}`);
   }
 }
 
@@ -33,10 +34,9 @@ const AdminSettings = () => {
   const [enabledProjects, setEnabledProjects] = useState([]);
   const [projectIssueTypes, setProjectIssueTypes] = useState({});
 
-  // Set of month strings that are checked (enabled for issue-level selection)
-  const [enabledMonths, setEnabledMonths] = useState(new Set());
   // Map of month string → max working hours number
   const [monthWorkingHours, setMonthWorkingHours] = useState({});
+  const [showWorkingHours, setShowWorkingHours] = useState(false);
 
   // Manager role config
   const [managerUsers, setManagerUsers] = useState([]);   // array of accountId strings
@@ -79,8 +79,6 @@ const AdminSettings = () => {
           setEnableAll(config.enableAll !== false);
           setEnabledProjects(config.enabledProjects || []);
           setProjectIssueTypes(config.projectSpecificIssueTypes || {});
-          // Restore checked months from saved config
-          setEnabledMonths(new Set(config.availableMonths || []));
           setMonthWorkingHours(config.monthWorkingHours || {});
           setManagerUsers(config.managerUsers || []);
           setManagerGroups(config.managerGroups || []);
@@ -103,20 +101,7 @@ const AdminSettings = () => {
 
   useEffect(() => {
     if (isLoaded.current) setHasUnsavedChanges(true);
-  }, [enableAll, enabledProjects, projectIssueTypes, enabledMonths, monthWorkingHours, managerUsers, managerGroups, maxKupPercent, kupLimitEnforcement, exportEmployeeIdField, exportCostCenterField]);
-
-  // Toggle a single month checkbox on/off
-  const toggleMonth = (month) => {
-    setEnabledMonths(prev => {
-      const next = new Set(prev);
-      if (next.has(month)) {
-        next.delete(month);
-      } else {
-        next.add(month);
-      }
-      return next;
-    });
-  };
+  }, [enableAll, enabledProjects, projectIssueTypes, monthWorkingHours, managerUsers, managerGroups, maxKupPercent, kupLimitEnforcement, exportEmployeeIdField, exportCostCenterField]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -128,7 +113,6 @@ const AdminSettings = () => {
         enableAll,
         enabledProjects,
         projectSpecificIssueTypes: projectIssueTypes,
-        availableMonths: Array.from(enabledMonths),
         monthWorkingHours,
         managerUsers,
         managerGroups,
@@ -353,54 +337,70 @@ const AdminSettings = () => {
           </Stack>
         </Box>
 
-        {/* Available Months — DynamicTable with per-row toggles */}
+        {/* Monthly working-hour baselines used for percentage calculations. */}
         <Box paddingBlockStart="space.200">
-          <Heading size="small">Available KUP Months</Heading>
-          <Text>Toggle the months that should be available for selection on issues. {enabledMonths.size} enabled, {ALL_MONTHS.length - enabledMonths.size} read only.</Text>
-          <Box paddingBlock="space.150">
-            <Inline space="space.100">
-              <Button appearance="subtle" onClick={() => setEnabledMonths(new Set(ALL_MONTHS))}>Enable All</Button>
-              <Button appearance="subtle" onClick={() => setEnabledMonths(new Set())}>Disable All</Button>
-            </Inline>
-          </Box>
-          <DynamicTable
-            head={{
-              cells: [
-                { key: 'month', content: 'Month', isSortable: true },
-                { key: 'hours', content: 'Max Working Hours', width: 20 },
-                { key: 'enabled', content: 'Enabled', width: 10 },
-              ]
-            }}
-            rows={ALL_MONTHS.map(month => ({
-              key: month,
-              cells: [
-                { key: 'month', content: month },
-                { key: 'hours', content: (
-                  <Textfield
-                    id={`hours-${month}`}
-                    type="number"
-                    value={String(monthWorkingHours[month] ?? '')}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setMonthWorkingHours(prev => ({ ...prev, [month]: val === '' ? '' : Number(val) }));
-                    }}
-                  />
-                )},
-                { key: 'enabled', content: (
-                  <Toggle
-                    id={`toggle-${month}`}
-                    isChecked={enabledMonths.has(month)}
-                    onChange={() => toggleMonth(month)}
-                  />
-                )},
-              ]
-            }))}
-            rowsPerPage={12}
-            defaultPage={(() => {
-              const firstIdx = ALL_MONTHS.findIndex(m => enabledMonths.has(m));
-              return firstIdx >= 0 ? Math.floor(firstIdx / 12) + 1 : 1;
-            })()}
-          />
+          <Heading size="small">Monthly Working Hours</Heading>
+          <Text>Set the standard number of working hours for each month. These values are used to calculate KUP percentages. Defaults are based on the Polish public holiday calendar, and you can adjust them to match your organization’s working calendar.</Text>
+          <Inline space="space.100" alignBlock="center">
+            <Text>{Object.keys(monthWorkingHours).length === 0
+              ? 'Using Polish calendar defaults'
+              : `${Object.keys(monthWorkingHours).length} custom override${Object.keys(monthWorkingHours).length === 1 ? '' : 's'}`}</Text>
+            <Button appearance="subtle" onClick={() => setShowWorkingHours(current => !current)}>
+              {showWorkingHours ? 'Hide overrides' : 'Manage overrides'}
+            </Button>
+          </Inline>
+          {showWorkingHours && (
+            <Stack space="space.100">
+              {Object.keys(monthWorkingHours).length > 0 && (
+                <Inline spread="space-between" alignBlock="center">
+                  <Text>Only custom values are saved. Empty fields use the default shown beside them.</Text>
+                  <Button appearance="subtle" onClick={() => setMonthWorkingHours({})}>Reset all overrides</Button>
+                </Inline>
+              )}
+              <DynamicTable
+                head={{
+                  cells: [
+                    { key: 'month', content: 'Month', isSortable: true },
+                    { key: 'default', content: 'Polish calendar default', width: 20 },
+                    { key: 'override', content: 'Custom hours', width: 20 },
+                    { key: 'action', content: '', width: 10 },
+                  ]
+                }}
+                rows={ALL_MONTHS.map(month => ({
+                  key: month,
+                  cells: [
+                    { key: 'month', content: month },
+                    { key: 'default', content: String(DEFAULT_WORKING_HOURS[month] ?? '—') },
+                    { key: 'override', content: (
+                      <Textfield
+                        id={`hours-${month}`}
+                        type="number"
+                        value={String(monthWorkingHours[month] ?? '')}
+                        placeholder={String(DEFAULT_WORKING_HOURS[month] ?? '')}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setMonthWorkingHours(prev => {
+                            const next = { ...prev };
+                            if (val === '' || Number(val) === DEFAULT_WORKING_HOURS[month]) delete next[month];
+                            else next[month] = Number(val);
+                            return next;
+                          });
+                        }}
+                      />
+                    )},
+                    { key: 'action', content: monthWorkingHours[month] !== undefined ? (
+                      <Button appearance="subtle" onClick={() => setMonthWorkingHours(prev => {
+                        const next = { ...prev };
+                        delete next[month];
+                        return next;
+                      })}>Reset</Button>
+                    ) : null },
+                  ]
+                }))}
+                rowsPerPage={12}
+              />
+            </Stack>
+          )}
         </Box>
 
         {/* Explicit save */}

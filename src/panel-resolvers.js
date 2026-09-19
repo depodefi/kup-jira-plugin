@@ -1,12 +1,11 @@
 import Resolver from '@forge/resolver';
 import api, { route } from '@forge/api';
 import kvs from '@forge/kvs';
-import { defaultAvailableMonths } from './kup-defaults.js';
 import { createRequestId, logSafe, safeErrorCode } from './safe-logger.js';
 import { trackPersonalData } from './privacy-data.js';
 import { requireActiveLicense } from './license-guard.js';
 
-const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
+import { PERIOD_PATTERN as MONTH_REGEX } from './kup-period.js';
 const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 /**
@@ -46,7 +45,7 @@ function checkEligibility(config, projectId, issueTypeId) {
 /**
  * getPanelData: Called when the issue context panel loads.
  * Returns eligibility status, current KUP data saved on the issue,
- * the available months list from the admin config, and the audit log.
+ * approval status and the report link. Period selection needs no admin list.
  */
 panelResolver.define('getPanelData', async ({ context }) => {
   const issueId = context.extension?.issue?.id;
@@ -67,10 +66,6 @@ panelResolver.define('getPanelData', async ({ context }) => {
     return { eligible: false };
   }
 
-  let availableMonths = config?.availableMonths;
-  if (!availableMonths || availableMonths.length === 0) {
-    availableMonths = defaultAvailableMonths();
-  }
 
   const kupData = kupDataRes?.ok ? (await kupDataRes.json()).value || null : null;
   const approval = approvalRes?.ok ? (await approvalRes.json()).value || null : null;
@@ -79,7 +74,7 @@ panelResolver.define('getPanelData', async ({ context }) => {
   const envId = context.environmentId;
   const globalPagePath = appId && envId ? `/jira/apps/${appId}/${envId}` : null;
 
-  return { eligible: true, kupData, availableMonths, approval, globalPagePath };
+  return { eligible: true, kupData, approval, globalPagePath };
 });
 
 /**
@@ -109,7 +104,7 @@ panelResolver.define('getAuditLog', async ({ context }) => {
  * on the issue, and appends a timestamped audit entry recording
  * who made the change and what was modified.
  *
- * The kupMonth format is YYYY-MM-KUP (e.g. "2026-01-KUP").
+ * The kupMonth format is YYYY-MM (e.g. "2026-01").
  */
 panelResolver.define('saveKupData', async ({ payload, context }) => {
   const requestId = createRequestId();

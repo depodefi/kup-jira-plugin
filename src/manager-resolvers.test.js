@@ -48,21 +48,21 @@ describe('managerResolver', () => {
   it('getManagerReport returns Unauthorized for non-managers', async () => {
     storage.get.mockResolvedValueOnce({ managerUsers: [], managerGroups: [] });
 
-    const result = await invoke('getManagerReport', { month: '2026-03-KUP' }, 'dev-001');
+    const result = await invoke('getManagerReport', { month: '2026-03' }, 'dev-001');
     expect(result).toEqual({ error: 'Unauthorized' });
   });
 
   it('bulkApprove returns Unauthorized for non-managers', async () => {
     storage.get.mockResolvedValueOnce({ managerUsers: [], managerGroups: [] });
 
-    const result = await invoke('bulkApprove', { accountId: 'dev-001', month: '2026-03-KUP' }, 'dev-002');
+    const result = await invoke('bulkApprove', { accountId: 'dev-001', month: '2026-03' }, 'dev-002');
     expect(result).toEqual({ error: 'Unauthorized' });
   });
 
   it('bulkUnapprove returns Unauthorized for non-managers', async () => {
     storage.get.mockResolvedValueOnce({ managerUsers: [], managerGroups: [] });
 
-    const result = await invoke('bulkUnapprove', { accountId: 'dev-001', month: '2026-03-KUP' }, 'dev-002');
+    const result = await invoke('bulkUnapprove', { accountId: 'dev-001', month: '2026-03' }, 'dev-002');
     expect(result).toEqual({ error: 'Unauthorized' });
   });
 
@@ -72,7 +72,7 @@ describe('managerResolver', () => {
     // storage.get calls: checkIsManager, teamFilter (skipped), final config for maxWorkingHours
     storage.get
       .mockResolvedValueOnce(managerConfig)      // checkIsManager
-      .mockResolvedValueOnce({ monthWorkingHours: { '2026-03-KUP': 176 } }); // maxWorkingHours
+      .mockResolvedValueOnce({ monthWorkingHours: { '2026-03': 176 } }); // maxWorkingHours
 
     api.requestJira.mockResolvedValueOnce({
       ok: true,
@@ -98,9 +98,9 @@ describe('managerResolver', () => {
       }),
     });
 
-    const result = await invoke('getManagerReport', { month: '2026-03-KUP' });
+    const result = await invoke('getManagerReport', { month: '2026-03' });
 
-    expect(result.month).toBe('2026-03-KUP');
+    expect(result.month).toBe('2026-03');
     expect(result.maxWorkingHours).toBe(176);
     expect(result.users).toHaveLength(2);
 
@@ -119,7 +119,7 @@ describe('managerResolver', () => {
   it('getManagerReport paginates Jira group members beyond the first page', async () => {
     storage.get
       .mockResolvedValueOnce(managerConfig)
-      .mockResolvedValueOnce({ monthWorkingHours: { '2026-03-KUP': 176 } });
+      .mockResolvedValueOnce({ monthWorkingHours: { '2026-03': 176 } });
 
     const firstGroupPage = Array.from({ length: 200 }, (_, index) => ({
       accountId: index === 0 ? 'dev-001' : `other-${index}`,
@@ -153,7 +153,7 @@ describe('managerResolver', () => {
       });
 
     const result = await invoke('getManagerReport', {
-      month: '2026-03-KUP',
+      month: '2026-03',
       groupId: 'developers',
     });
 
@@ -187,7 +187,7 @@ describe('managerResolver', () => {
       }),
     });
 
-    const result = await invoke('getManagerReport', { month: '2026-03-KUP' });
+    const result = await invoke('getManagerReport', { month: '2026-03' });
     const alice = result.users.find(u => u.accountId === 'dev-001');
     expect(alice.status).toBe('pending');
     expect(alice.totalHours).toBe(8);
@@ -203,7 +203,7 @@ describe('managerResolver', () => {
       json: async () => ({ total: 0, issues: [] }),
     });
 
-    await invoke('getManagerReport', { month: '2026-03-KUP', statusFilter: 'pending' });
+    await invoke('getManagerReport', { month: '2026-03', statusFilter: 'pending' });
 
     const [, callArgs] = api.requestJira.mock.calls[0];
     const body = JSON.parse(callArgs.body);
@@ -238,7 +238,7 @@ describe('managerResolver', () => {
       .mockResolvedValueOnce({ ok: false })                          // GET audit log PROJ-11
       .mockResolvedValueOnce({ ok: true, json: async () => ({}) });  // PUT audit log PROJ-11
 
-    const result = await invoke('bulkApprove', { accountId: 'dev-001', month: '2026-03-KUP' });
+    const result = await invoke('bulkApprove', { accountId: 'dev-001', month: '2026-03' });
 
     expect(result).toEqual({ success: true, approvedCount: 2 });
 
@@ -277,7 +277,7 @@ describe('managerResolver', () => {
         }),
       });
 
-    const result = await invoke('bulkApprove', { accountId: 'dev-001', month: '2026-03-KUP' });
+    const result = await invoke('bulkApprove', { accountId: 'dev-001', month: '2026-03' });
     expect(result).toEqual({ success: true, approvedCount: 0 });
     // Only the JQL search runs — no writes, and no manager-name fetch
     expect(api.requestJira).toHaveBeenCalledTimes(1);
@@ -302,7 +302,7 @@ describe('managerResolver', () => {
       .mockResolvedValueOnce({ ok: false })                         // GET audit log
       .mockResolvedValueOnce({ ok: true, json: async () => ({}) }); // PUT audit log
 
-    const result = await invoke('bulkUnapprove', { accountId: 'dev-001', month: '2026-03-KUP' });
+    const result = await invoke('bulkUnapprove', { accountId: 'dev-001', month: '2026-03' });
     expect(result).toEqual({ success: true, unapprovedCount: 1 });
 
     const approvalCall = api.requestJira.mock.calls.find(
@@ -336,7 +336,7 @@ describe('managerResolver', () => {
         }),
       });
 
-    const result = await invoke('bulkUnapprove', { accountId: 'dev-001', month: '2026-03-KUP' });
+    const result = await invoke('bulkUnapprove', { accountId: 'dev-001', month: '2026-03' });
     expect(result).toEqual({ success: true, unapprovedCount: 0 });
     expect(api.requestJira).toHaveBeenCalledTimes(1);
   });
@@ -348,7 +348,7 @@ describe('managerResolver', () => {
 
     const result = await invoke('bulkApprove', {
       accountId: '" OR assignee IS NOT EMPTY OR x = "',
-      month: '2026-03-KUP',
+      month: '2026-03',
     });
 
     expect(result).toEqual({ success: false, error: 'Invalid account ID' });
@@ -360,7 +360,7 @@ describe('managerResolver', () => {
 
     const result = await invoke('bulkUnapprove', {
       accountId: 'x" AND issue.property[kup-data].kupMonth IS NOT EMPTY AND assignee = "y',
-      month: '2026-03-KUP',
+      month: '2026-03',
     });
 
     expect(result).toEqual({ success: false, error: 'Invalid account ID' });
@@ -369,11 +369,11 @@ describe('managerResolver', () => {
 
   it('bulkApprove rejects a missing or non-string accountId', async () => {
     storage.get.mockResolvedValueOnce(managerConfig);
-    const missing = await invoke('bulkApprove', { month: '2026-03-KUP' });
+    const missing = await invoke('bulkApprove', { month: '2026-03' });
     expect(missing).toEqual({ success: false, error: 'Invalid account ID' });
 
     storage.get.mockResolvedValueOnce(managerConfig);
-    const nonString = await invoke('bulkApprove', { accountId: { evil: true }, month: '2026-03-KUP' });
+    const nonString = await invoke('bulkApprove', { accountId: { evil: true }, month: '2026-03' });
     expect(nonString).toEqual({ success: false, error: 'Invalid account ID' });
     expect(api.requestJira).not.toHaveBeenCalled();
   });
@@ -384,7 +384,7 @@ describe('managerResolver', () => {
     api.requestJira
       .mockResolvedValueOnce({ ok: true, json: async () => ({ total: 0, issues: [] }) });
 
-    const result = await invoke('bulkApprove', { accountId: '557058:f58131cb-b67d-43c7-b30d-6b58d40bd077', month: '2026-03-KUP' });
+    const result = await invoke('bulkApprove', { accountId: '557058:f58131cb-b67d-43c7-b30d-6b58d40bd077', month: '2026-03' });
     expect(result).toEqual({ success: true, approvedCount: 0 });
   });
 
@@ -416,7 +416,7 @@ describe('managerResolver', () => {
     storage.get
       .mockResolvedValueOnce(managerConfig) // checkIsManager
       .mockResolvedValueOnce([              // central approval log — IDs only, no persisted names
-        { action: 'approval', managerId: 'mgr-1', targetUserId: 'emp-1', month: '2026-03-KUP', issueCount: 2, issueKeys: ['P-1', 'P-2'], timestamp: '2026-03-10T09:00:00Z' },
+        { action: 'approval', managerId: 'mgr-1', targetUserId: 'emp-1', month: '2026-03', issueCount: 2, issueKeys: ['P-1', 'P-2'], timestamp: '2026-03-10T09:00:00Z' },
       ]);
 
     // resolveUserNames issues one /user lookup per unique account ID
@@ -426,7 +426,7 @@ describe('managerResolver', () => {
       return Promise.resolve({ ok: false });
     });
 
-    const result = await invoke('getApprovalAuditLog', { month: '2026-03-KUP' });
+    const result = await invoke('getApprovalAuditLog', { month: '2026-03' });
 
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0].managerName).toBe('Manager Mike');
@@ -440,7 +440,7 @@ describe('managerResolver', () => {
     storage.get
       .mockResolvedValueOnce(managerConfig)
       .mockResolvedValueOnce([
-        { action: 'unapproval', managerId: 'mgr-1', targetUserId: 'gone-1', month: '2026-03-KUP', issueCount: 1, issueKeys: ['P-9'], timestamp: '2026-03-11T09:00:00Z' },
+        { action: 'unapproval', managerId: 'mgr-1', targetUserId: 'gone-1', month: '2026-03', issueCount: 1, issueKeys: ['P-9'], timestamp: '2026-03-11T09:00:00Z' },
       ]);
 
     api.requestJira.mockImplementation((url) => {
@@ -448,7 +448,7 @@ describe('managerResolver', () => {
       return Promise.resolve({ ok: false }); // gone-1 no longer exists
     });
 
-    const result = await invoke('getApprovalAuditLog', { month: '2026-03-KUP' });
+    const result = await invoke('getApprovalAuditLog', { month: '2026-03' });
     expect(result.entries[0].targetUserName).toBe('Former user');
   });
 

@@ -15,7 +15,7 @@ describe('safe logger', () => {
   it('keeps operational fields and strips identity and content fields', () => {
     logSafe('info', 'getManagerReport', {
       requestId: 'request-123',
-      month: '2026-03-KUP',
+      month: '2026-03',
       pagesFetched: 3,
       accountId: 'user-123',
       issueKey: 'PROJ-123',

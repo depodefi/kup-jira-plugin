@@ -44,7 +44,7 @@ const ManagerApprovalPage = () => {
         setMonths(options);
 
         const d = new Date();
-        const currentMonthString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-KUP`;
+        const currentMonthString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         const defaultOption = options.find(o => o.value === currentMonthString) || options[0];
         if (defaultOption) setSelectedMonth(defaultOption);
       } catch (err) {

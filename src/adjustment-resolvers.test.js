@@ -46,10 +46,10 @@ describe('adjustment resolvers', () => {
   it('getMyAdjustment returns defaults when no record exists', async () => {
     mockEntity.get.mockResolvedValueOnce(undefined);
 
-    const result = await invoke('getMyAdjustment', { month: '2026-04-KUP' });
+    const result = await invoke('getMyAdjustment', { month: '2026-04' });
 
     expect(result).toEqual({ absenceHours: 0, overtimeHours: 0, updatedAt: null });
-    expect(mockEntity.get).toHaveBeenCalledWith('user-001_2026-04-KUP');
+    expect(mockEntity.get).toHaveBeenCalledWith('user-001_2026-04');
   });
 
   it('getMyAdjustment returns stored values', async () => {
@@ -59,7 +59,7 @@ describe('adjustment resolvers', () => {
       updatedAt: '2026-04-01T10:00:00Z',
     });
 
-    const result = await invoke('getMyAdjustment', { month: '2026-04-KUP' });
+    const result = await invoke('getMyAdjustment', { month: '2026-04' });
 
     expect(result.absenceHours).toBe(40);
     expect(result.overtimeHours).toBe(16);
@@ -70,17 +70,17 @@ describe('adjustment resolvers', () => {
 
   it('saveMyAdjustment writes record for non-zero values', async () => {
     api.requestJira.mockResolvedValueOnce({ ok: true, json: async () => ({ issues: [] }) }); // lock check
-    storage.get.mockResolvedValueOnce({ monthWorkingHours: { '2026-04-KUP': 168 } });
+    storage.get.mockResolvedValueOnce({ monthWorkingHours: { '2026-04': 168 } });
     mockEntity.set.mockResolvedValueOnce();
 
     const result = await invoke('saveMyAdjustment', {
-      month: '2026-04-KUP', absenceHours: 40, overtimeHours: 16,
+      month: '2026-04', absenceHours: 40, overtimeHours: 16,
     });
 
     expect(result).toEqual({ success: true });
     expect(mockEntity.set).toHaveBeenCalledWith(
-      'user-001_2026-04-KUP',
-      expect.objectContaining({ accountId: 'user-001', month: '2026-04-KUP', absenceHours: 40, overtimeHours: 16 })
+      'user-001_2026-04',
+      expect.objectContaining({ accountId: 'user-001', month: '2026-04', absenceHours: 40, overtimeHours: 16 })
     );
   });
 
@@ -90,17 +90,17 @@ describe('adjustment resolvers', () => {
     mockEntity.delete.mockResolvedValueOnce();
 
     const result = await invoke('saveMyAdjustment', {
-      month: '2026-04-KUP', absenceHours: 0, overtimeHours: 0,
+      month: '2026-04', absenceHours: 0, overtimeHours: 0,
     });
 
     expect(result).toEqual({ success: true, deleted: true });
-    expect(mockEntity.delete).toHaveBeenCalledWith('user-001_2026-04-KUP');
+    expect(mockEntity.delete).toHaveBeenCalledWith('user-001_2026-04');
     expect(mockEntity.set).not.toHaveBeenCalled();
   });
 
   it('saveMyAdjustment rejects negative absence hours', async () => {
     const result = await invoke('saveMyAdjustment', {
-      month: '2026-04-KUP', absenceHours: -1, overtimeHours: 0,
+      month: '2026-04', absenceHours: -1, overtimeHours: 0,
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/between 0 and 744/);
@@ -108,10 +108,10 @@ describe('adjustment resolvers', () => {
 
   it('saveMyAdjustment rejects absence hours exceeding max working hours', async () => {
     api.requestJira.mockResolvedValueOnce({ ok: true, json: async () => ({ issues: [] }) }); // lock check
-    storage.get.mockResolvedValueOnce({ monthWorkingHours: { '2026-04-KUP': 168 } });
+    storage.get.mockResolvedValueOnce({ monthWorkingHours: { '2026-04': 168 } });
 
     const result = await invoke('saveMyAdjustment', {
-      month: '2026-04-KUP', absenceHours: 200, overtimeHours: 0,
+      month: '2026-04', absenceHours: 200, overtimeHours: 0,
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/168/);
@@ -122,7 +122,7 @@ describe('adjustment resolvers', () => {
   it('getAdjustmentsForMonth returns Unauthorized for non-managers', async () => {
     storage.get.mockResolvedValueOnce({ managerUsers: [], managerGroups: [] });
 
-    const result = await invoke('getAdjustmentsForMonth', { month: '2026-04-KUP' }, 'dev-001');
+    const result = await invoke('getAdjustmentsForMonth', { month: '2026-04' }, 'dev-001');
     expect(result).toEqual({ error: 'Unauthorized' });
   });
 
@@ -144,7 +144,7 @@ describe('adjustment resolvers', () => {
     };
     mockEntity.query.mockReturnValueOnce(mockQueryBuilder);
 
-    const result = await invoke('getAdjustmentsForMonth', { month: '2026-04-KUP' }, 'manager-001');
+    const result = await invoke('getAdjustmentsForMonth', { month: '2026-04' }, 'manager-001');
 
     expect(result.adjustments).toEqual({
       'dev-001': { absenceHours: 40, overtimeHours: 0 },
@@ -165,7 +165,7 @@ describe('adjustment resolvers', () => {
     };
     mockEntity.query.mockReturnValueOnce(mockQueryBuilder);
 
-    const result = await invoke('getAdjustmentsForMonth', { month: '2026-04-KUP' }, 'manager-001');
+    const result = await invoke('getAdjustmentsForMonth', { month: '2026-04' }, 'manager-001');
     expect(result).toEqual({ adjustments: {} });
   });
 });

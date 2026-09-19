@@ -86,8 +86,7 @@ describe('adminResolver', () => {
         enableAll: false,
         enabledProjects: ['10000'],
         projectSpecificIssueTypes: { '10000': ['1', '2'] },
-        availableMonths: ['2026-01-KUP', '2026-02-KUP'],
-        monthWorkingHours: { '2026-01-KUP': 168 },
+        monthWorkingHours: { '2026-01': 168 },
         managerUsers: ['557058:abc-def'],
         managerGroups: ['9f0c2a4e-1b2c-4d5e-8f90-aabbccddeeff'],
         maxKupPercent: 20,
@@ -112,11 +111,11 @@ describe('adminResolver', () => {
     expect(storage.set).not.toHaveBeenCalled();
   });
 
-  it('saveKupConfig rejects malformed availableMonths entries', async () => {
+  it('saveKupConfig rejects the removed availableMonths setting', async () => {
     const result = await adminHandler({
       context: {},
       contextToken: 'token',
-      call: { functionKey: 'saveKupConfig', payload: { availableMonths: ['2026-01-KUP', 'not-a-month'] } }
+      call: { functionKey: 'saveKupConfig', payload: { availableMonths: ['2026-01', 'not-a-month'] } }
     });
 
     expect(result.success).toBe(false);
@@ -127,7 +126,7 @@ describe('adminResolver', () => {
     const result = await adminHandler({
       context: {},
       contextToken: 'token',
-      call: { functionKey: 'saveKupConfig', payload: { monthWorkingHours: { '2026-01-KUP': 999 } } }
+      call: { functionKey: 'saveKupConfig', payload: { monthWorkingHours: { '2026-01': 999 } } }
     });
 
     expect(result.success).toBe(false);

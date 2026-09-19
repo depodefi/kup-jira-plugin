@@ -1,3 +1,5 @@
+import { PeriodPicker } from '../period-picker.jsx';
+import { initialKupPeriod } from '../kup-period.js';
 import { useLicenseStatus } from '../use-license-status.js';
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
@@ -16,7 +18,6 @@ const KupPanel = () => {
   const { licenseActive, licenseMessage, checkLicense } = useLicenseStatus();
   const [saving, setSaving] = useState(false);
   const [eligible, setEligible] = useState(false);
-  const [months, setMonths] = useState([]);
   const [kupMonth, setKupMonth] = useState(null);
   const [kupHours, setKupHours] = useState('');
   const [auditLog, setAuditLog] = useState(null); // null = not yet loaded
@@ -36,13 +37,10 @@ const KupPanel = () => {
       }
 
       setEligible(true);
-      setMonths(data.availableMonths.map(m => ({ label: m, value: m })));
+      const period = initialKupPeriod(data.kupData?.kupMonth);
+      setKupMonth({ label: period, value: period });
 
       if (data.kupData) {
-        setKupMonth(data.kupData.kupMonth
-          ? { label: data.kupData.kupMonth, value: data.kupData.kupMonth }
-          : null
-        );
         setKupHours(data.kupData.kupHours != null ? String(data.kupData.kupHours) : '');
       }
 
@@ -186,16 +184,7 @@ const KupPanel = () => {
 
         {/* KUP Month selector */}
         <Box>
-          <Label labelFor="kup-month-select">KUP Month</Label>
-          <Select
-            inputId="kup-month-select"
-            options={months}
-            value={kupMonth}
-            onChange={(val) => setKupMonth(val)}
-            placeholder="Select month (YYYY-MM-KUP)..."
-            isClearable={true}
-            isDisabled={isApproved}
-          />
+          <PeriodPicker id="kup-period" value={kupMonth} onChange={setKupMonth} isDisabled={isApproved} />
         </Box>
 
         {/* KUP Hours input */}

@@ -9,6 +9,8 @@ jest.mock('@forge/api', () => ({
   requestJira: jest.fn(),
 }));
 
+jest.mock('./privacy-data.js', () => ({ trackPersonalData: jest.fn() }));
+
 jest.mock('@forge/kvs', () => ({
   __esModule: true,
   default: { get: jest.fn(), set: jest.fn(), delete: jest.fn() },
@@ -40,8 +42,27 @@ describe('panelResolver', () => {
     expect(api.requestJira).not.toHaveBeenCalled();
   });
 
+  it('saves one canonical period with hours and records the change', async () => {
+    api.requestJira.mockResolvedValue({ ok: false });
+    api.requestJira.mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: true });
+    const result = await invoke('saveKupData', { kupMonth: '2026-09', kupHours: 8 });
+    expect(result.success).toBe(true);
+    expect(result.kupData).toEqual({ kupMonth: '2026-09', kupHours: 8 });
+    expect(api.requestJira).toHaveBeenCalledWith('/rest/api/3/issue/10001/properties/kup-data',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ kupMonth: '2026-09', kupHours: 8 }) }));
+    expect(result.auditLog[0].changes.kupMonth).toEqual({ from: null, to: '2026-09' });
+  });
+
+  test.each(['2026-00', '2026-13', '2026-09-KUP'])('rejects invalid calendar period %s', async kupMonth => {
+    const result = await invoke('saveKupData', { kupMonth, kupHours: 8 });
+    expect(result.success).toBe(false);
+    expect(api.requestJira).not.toHaveBeenCalled();
+  });
+
   it('rejects hours outside the supported monthly range', async () => {
-    const result = await invoke('saveKupData', { kupMonth: '2026-03-KUP', kupHours: 745 });
+    const result = await invoke('saveKupData', { kupMonth: '2026-03', kupHours: 745 });
 
     expect(result).toEqual({ success: false, error: 'KUP hours must be a number between 0 and 744.' });
     expect(api.requestJira).not.toHaveBeenCalled();

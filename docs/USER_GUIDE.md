@@ -16,7 +16,7 @@ If you are new to the concept, start with [Key concepts](#key-concepts).
 - [Administrator guide](#administrator-guide)
   - [Opening the configuration page](#opening-the-configuration-page)
   - [Eligible projects & issue types](#1-eligible-projects--issue-types)
-  - [Available months](#2-available-months)
+  - [KUP periods](#2-kup-periods)
   - [Working hours per month](#3-working-hours-per-month)
   - [Managers](#4-managers)
   - [KUP percentage limit](#5-kup-percentage-limit)
@@ -71,12 +71,15 @@ Controls **where the KUP panel appears** and which issues can carry KUP hours.
 - **Enable for all projects & issue types** — the simplest setup. When on, the KUP panel appears on every issue.
 - To scope it down, turn that off and pick specific **projects**. Optionally, per project, restrict to specific **issue types** (leave issue types empty to allow all types in that project).
 
-### 2. Available months
+### 2. KUP periods
 
-The list of KUP months that appear in every month dropdown across the app.
-
-- Toggle individual months on/off in the table.
-- If you never configure this, the app defaults to all twelve months of the **current calendar year**.
+Users select a year and month directly; administrators no longer enable individual months.
+Each issue stores one period as `YYYY-MM`. Month names follow the user's Jira locale.
+For an issue without a saved period, days 1–10 suggest the previous month (including
+December of the previous year in January); from day 11 the current month is suggested.
+The date uses the browser's local calendar. Existing periods are preserved. Opening an
+issue does not save anything: users save the period together with their KUP hours.
+Reports use the same year/month picker and initial-period rule.
 
 ### 3. Working hours per month
 

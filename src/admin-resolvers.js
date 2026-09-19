@@ -1,11 +1,11 @@
 import Resolver from '@forge/resolver';
 import api, { route } from '@forge/api';
 import kvs from '@forge/kvs';
-import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
+import { extractWorkingHoursOverrides } from './kup-defaults.js';
 import { trackPersonalData } from './privacy-data.js';
 import { requireActiveLicense } from './license-guard.js';
 
-const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
+import { PERIOD_PATTERN as MONTH_REGEX } from './kup-period.js';
 const ACCOUNT_ID_REGEX = /^[a-zA-Z0-9:-]{1,128}$/;
 const GROUP_ID_REGEX = /^[a-zA-Z0-9-]{1,64}$/;
 const ENTITY_ID_REGEX = /^[a-zA-Z0-9_-]{1,64}$/; // project / issue type IDs
@@ -13,7 +13,7 @@ const CUSTOM_FIELD_REGEX = /^customfield_\d{1,10}$/;
 
 const KNOWN_CONFIG_KEYS = [
   'enableAll', 'enabledProjects', 'enabledIssueTypes', 'projectSpecificIssueTypes',
-  'availableMonths', 'monthWorkingHours', 'managerUsers', 'managerGroups',
+  'monthWorkingHours', 'managerUsers', 'managerGroups',
   'maxKupPercent', 'kupLimitEnforcement', 'exportFieldMappings',
 ];
 
@@ -31,7 +31,7 @@ function validateKupConfig(payload) {
   if (unknown.length > 0) return `Unknown config keys: ${unknown.join(', ')}`;
 
   const { enableAll, enabledProjects, enabledIssueTypes, projectSpecificIssueTypes,
-    availableMonths, monthWorkingHours, managerUsers, managerGroups,
+    monthWorkingHours, managerUsers, managerGroups,
     maxKupPercent, kupLimitEnforcement, exportFieldMappings } = payload;
 
   if (enableAll !== undefined && typeof enableAll !== 'boolean') {
@@ -53,16 +53,13 @@ function validateKupConfig(payload) {
       }
     }
   }
-  if (availableMonths !== undefined && !isStringArray(availableMonths, MONTH_REGEX, 120)) {
-    return 'availableMonths must be an array of YYYY-MM-KUP strings';
-  }
   if (monthWorkingHours !== undefined) {
     if (typeof monthWorkingHours !== 'object' || monthWorkingHours === null || Array.isArray(monthWorkingHours)) {
       return 'monthWorkingHours must be an object';
     }
     for (const [month, hours] of Object.entries(monthWorkingHours)) {
       if (!MONTH_REGEX.test(month) || typeof hours !== 'number' || isNaN(hours) || hours < 0 || hours > 744) {
-        return 'monthWorkingHours must map YYYY-MM-KUP to a number between 0 and 744';
+        return 'monthWorkingHours must map YYYY-MM to a number between 0 and 744';
       }
     }
   }
@@ -123,21 +120,13 @@ adminResolver.define('getJiraContext', async () => {
 adminResolver.define('getKupConfig', async () => {
   const config = await kvs.get('kup_config');
   
-  // If undefined or empty (first install/never configured), default to the current year
-  let availableMonths = config?.availableMonths;
-  if (!availableMonths || availableMonths.length === 0) {
-    availableMonths = defaultAvailableMonths();
-  }
 
-  let monthWorkingHours = config?.monthWorkingHours;
-  if (!monthWorkingHours) {
-    monthWorkingHours = DEFAULT_WORKING_HOURS;
-    await kvs.set('kup_config', { ...(config || {}), monthWorkingHours });
-  }
+  // The admin UI edits only explicit overrides. Reports independently merge
+  // these values with the bundled Polish working calendar.
+  const monthWorkingHours = extractWorkingHoursOverrides(config);
 
   return {
     ...(config || { enabledProjects: [], enabledIssueTypes: [] }),
-    availableMonths,
     monthWorkingHours,
     managerUsers: config?.managerUsers || [],
     managerGroups: config?.managerGroups || [],

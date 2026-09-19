@@ -57,7 +57,7 @@ describe('exportAsyncHandler load profile', () => {
 
     let searchPage = 0;
     kvs.get.mockResolvedValueOnce({
-      monthWorkingHours: { '2026-03-KUP': 176 },
+      monthWorkingHours: { '2026-03': 176 },
       maxKupPercent: null,
     });
     api.requestJira.mockImplementation(async () => {
@@ -76,15 +76,15 @@ describe('exportAsyncHandler load profile', () => {
 
     const startedAt = Date.now();
     await exportAsyncHandler({
-      body: { month: '2026-03-KUP', format: 'csv', requestedBy: 'manager-001' },
+      body: { month: '2026-03', format: 'csv', requestedBy: 'manager-001' },
     });
     const elapsedMs = Date.now() - startedAt;
 
     expect(searchPage).toBe(50);
     expect(api.requestJira).toHaveBeenCalledTimes(50);
     expect(kvs.set).toHaveBeenCalledWith(
-      'export_manager-001_2026-03-KUP',
-      expect.objectContaining({ format: 'csv', filename: 'KUP_Payroll_2026-03-KUP.csv' }),
+      'export_manager-001_2026-03',
+      expect.objectContaining({ format: 'csv', filename: 'KUP_Payroll_2026-03.csv' }),
       expect.anything(),
     );
     expect(kvs.set.mock.calls[0][1].data.length).toBeGreaterThan(1000);

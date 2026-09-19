@@ -2,7 +2,7 @@ import Resolver from '@forge/resolver';
 import api, { route } from '@forge/api';
 import kvs, { WhereConditions } from '@forge/kvs';
 import { Queue } from '@forge/events';
-import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
+import { resolveWorkingHours, defaultAvailableMonths } from './kup-defaults.js';
 import { resolveUserNames } from './user-names.js';
 import { createRequestId, logSafe, safeErrorCode } from './safe-logger.js';
 import { trackPersonalData } from './privacy-data.js';
@@ -12,7 +12,7 @@ const exportQueue = new Queue({ key: 'payroll-export-queue' });
 
 const adjustmentEntity = kvs.entity('user-monthly-adjustment');
 
-const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
+import { PERIOD_PATTERN as MONTH_REGEX } from './kup-period.js';
 const VALID_STATUS_FILTERS = ['all', 'pending', 'approved'];
 const ACCOUNT_ID_REGEX = /^[a-zA-Z0-9:-]{1,128}$/;
 const MAX_TEAM_MEMBERS = 100;
@@ -232,7 +232,7 @@ managerResolver.define('getManagerReport', async ({ payload, context }) => {
   });
 
   const config = await kvs.get('kup_config');
-  const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
+  const workingHoursMap = resolveWorkingHours(config);
   const maxWorkingHours = workingHoursMap[month] ?? null;
 
   logSafe('info', 'getManagerReport', {
@@ -286,7 +286,7 @@ managerResolver.define('bulkApprove', async ({ payload, context }) => {
   const kupLimitEnforcement = kupConfig?.kupLimitEnforcement ?? 'warn';
   if (maxKupPercent) {
     const totalHours = data.issues.reduce((sum, i) => sum + (parseFloat((i.properties?.['kup-data'] || {}).kupHours) || 0), 0);
-    const maxWorkingHours = (kupConfig?.monthWorkingHours || DEFAULT_WORKING_HOURS)[month] ?? 0;
+    const maxWorkingHours = resolveWorkingHours(kupConfig)[month] ?? 0;
     const adjKey = `${accountId}_${month}`;
     const adj = await adjustmentEntity.get(adjKey);
     const adjustedBase = maxWorkingHours - (adj?.absenceHours ?? 0) + (adj?.overtimeHours ?? 0);
@@ -519,7 +519,7 @@ managerResolver.define('getMyKupReport', async ({ payload, context }) => {
     });
 
     const config = await kvs.get('kup_config');
-    const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
+    const workingHoursMap = resolveWorkingHours(config);
     const maxWorkingHours = workingHoursMap[month] ?? null;
 
     logSafe('info', 'getMyKupReport', {
@@ -559,15 +559,10 @@ managerResolver.define('getCurrentUserRole', async ({ context }) => {
 });
 
 /**
- * getAvailableMonths: Returns the configured list of KUP months for the month picker.
+ * getAvailableMonths: Returns calendar months for legacy report entry points.
  */
 managerResolver.define('getAvailableMonths', async () => {
-  const config = await kvs.get('kup_config');
-  let availableMonths = config?.availableMonths;
-  if (!availableMonths || availableMonths.length === 0) {
-    availableMonths = defaultAvailableMonths();
-  }
-  return availableMonths;
+  return defaultAvailableMonths();
 });
 
 /**
@@ -698,7 +693,7 @@ managerResolver.define('saveMyAdjustment', async ({ payload, context }) => {
   }
 
   const config = await kvs.get('kup_config');
-  const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
+  const workingHoursMap = resolveWorkingHours(config);
   const maxWorkingHours = workingHoursMap[month];
   if (maxWorkingHours != null && absenceHours > maxWorkingHours) {
     return { success: false, error: `Absence hours cannot exceed max working hours (${maxWorkingHours}).` };

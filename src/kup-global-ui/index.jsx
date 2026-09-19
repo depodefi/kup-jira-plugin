@@ -1,3 +1,5 @@
+import { PeriodPicker } from '../period-picker.jsx';
+import { defaultKupPeriod } from '../kup-period.js';
 import { useLicenseStatus } from '../use-license-status.js';
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import ForgeReconciler, {
@@ -12,7 +14,7 @@ import { invoke } from '@forge/bridge';
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
 
-// "2026-05-KUP" -> "May 2026"
+// "2026-05" -> "May 2026"
 const formatMonthLabel = (raw) => {
   if (!raw) return '';
   const [y, m] = raw.split('-');
@@ -21,13 +23,9 @@ const formatMonthLabel = (raw) => {
   return `${MONTH_NAMES[idx]} ${y}`;
 };
 
-const toMonthOptions = (months) =>
-  months.map(m => ({ label: formatMonthLabel(m.value), value: m.value }));
-
-const currentMonthDefault = (months) => {
-  const d = new Date();
-  const currentMonthString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-KUP`;
-  return months.find(o => o.value === currentMonthString) || months[0];
+const currentMonthDefault = () => {
+  const period = defaultKupPeriod();
+  return { label: period, value: period };
 };
 
 // Lozenge appearance + label from adjusted KUP %.
@@ -79,7 +77,7 @@ const STATUS_FILTER_OPTIONS = [
 // ---------------------------------------------------------------------------
 // My KUP Report view
 // ---------------------------------------------------------------------------
-const MyReportView = ({ months }) => {
+const MyReportView = () => {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [fetching, setFetching] = useState(false);
   const [reportData, setReportData] = useState({ issues: [], totalHours: 0, maxWorkingHours: null });
@@ -90,9 +88,9 @@ const MyReportView = ({ months }) => {
   const [adjustmentMessage, setAdjustmentMessage] = useState(null); // { type, text }
 
   useEffect(() => {
-    const defaultOption = currentMonthDefault(months);
+    const defaultOption = currentMonthDefault();
     if (defaultOption) setSelectedMonth(defaultOption);
-  }, [months]);
+  }, []);
 
   useEffect(() => {
     if (!selectedMonth) return;
@@ -203,15 +201,7 @@ const MyReportView = ({ months }) => {
     <Stack space="space.300">
       <Box xcss={{ maxWidth: '320px' }}>
         <Stack space="space.050">
-          <Label labelFor="my-month-select">Month</Label>
-          <Select
-            inputId="my-month-select"
-            options={toMonthOptions(months)}
-            value={selectedMonth ? { label: formatMonthLabel(selectedMonth.value), value: selectedMonth.value } : null}
-            onChange={setSelectedMonth}
-            isClearable={false}
-            isLoading={fetching}
-          />
+          <PeriodPicker id="my-period" value={selectedMonth} onChange={setSelectedMonth} />
         </Stack>
       </Box>
 
@@ -337,7 +327,7 @@ const EXPORT_FORMAT_OPTIONS = [
   { label: 'CSV (.csv)', value: 'csv' },
 ];
 
-const ManagerApprovalView = ({ months }) => {
+const ManagerApprovalView = () => {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [statusFilter, setStatusFilter] = useState(STATUS_FILTER_OPTIONS[0]);
   const [reportData, setReportData] = useState(null);
@@ -369,7 +359,7 @@ const ManagerApprovalView = ({ months }) => {
 
   // Default month and load groups + team on mount
   useEffect(() => {
-    const defaultOption = currentMonthDefault(months);
+    const defaultOption = currentMonthDefault();
     if (defaultOption) setSelectedMonth(defaultOption);
 
     Promise.all([
@@ -388,7 +378,7 @@ const ManagerApprovalView = ({ months }) => {
       });
       setTeamMembers(normalized);
     }).catch(() => console.error('Failed to load groups/team'));
-  }, [months]);
+  }, []);
 
   const fetchAdjustments = useCallback(async (month) => {
     if (!month) return;
@@ -714,14 +704,7 @@ const ManagerApprovalView = ({ months }) => {
       <Inline spread="space-between" alignBlock="end">
         <Inline space="space.200" alignBlock="end">
           <Stack space="space.050">
-            <Label labelFor="mgr-month-select">Month</Label>
-            <Select
-              inputId="mgr-month-select"
-              options={toMonthOptions(months)}
-              value={selectedMonth ? { label: formatMonthLabel(selectedMonth.value), value: selectedMonth.value } : null}
-              onChange={setSelectedMonth}
-              isClearable={false}
-            />
+            <PeriodPicker id="mgr-period" value={selectedMonth} onChange={setSelectedMonth} />
           </Stack>
           <Stack space="space.050">
             <Label labelFor="mgr-status-filter">Status</Label>
@@ -958,15 +941,15 @@ const formatAuditDate = (iso) => {
   return `${d.getFullYear()}-${mm}-${dd} · ${hh}:${mi}`;
 };
 
-const AuditLogView = ({ months }) => {
+const AuditLogView = () => {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [fetching, setFetching] = useState(false);
   const [entries, setEntries] = useState([]);
 
   useEffect(() => {
-    const defaultOption = currentMonthDefault(months);
+    const defaultOption = currentMonthDefault();
     if (defaultOption) setSelectedMonth(defaultOption);
-  }, [months]);
+  }, []);
 
   useEffect(() => {
     if (!selectedMonth) return;
@@ -1053,15 +1036,7 @@ const AuditLogView = ({ months }) => {
       {/* Month selector + CSV export */}
       <Inline spread="space-between" alignBlock="end">
         <Stack space="space.050">
-          <Label labelFor="audit-month-select">Month</Label>
-          <Select
-            inputId="audit-month-select"
-            options={toMonthOptions(months)}
-            value={selectedMonth ? { label: formatMonthLabel(selectedMonth.value), value: selectedMonth.value } : null}
-            onChange={setSelectedMonth}
-            isClearable={false}
-            isLoading={fetching}
-          />
+          <PeriodPicker id="audit-period" value={selectedMonth} onChange={setSelectedMonth} />
         </Stack>
         <Button onClick={handleExportCsv} isDisabled={fetching || entries.length === 0}>
           Export CSV
@@ -1124,7 +1099,6 @@ const KupGlobalPage = () => {
   const [loading, setLoading] = useState(true);
   const { licenseActive, licenseMessage, checkLicense } = useLicenseStatus();
   const [isManager, setIsManager] = useState(false);
-  const [months, setMonths] = useState([]);
   const [activeTab, setActiveTab] = useState('My Report');
 
   useEffect(() => {
@@ -1132,14 +1106,10 @@ const KupGlobalPage = () => {
 
     async function init() {
       try {
-        const [roleResult, availableMonths] = await Promise.all([
-          invoke('getCurrentUserRole'),
-          invoke('getAvailableMonths'),
-        ]);
+        const roleResult = await invoke('getCurrentUserRole');
         const manager = roleResult.isManager === true;
         setIsManager(manager);
         if (manager) setActiveTab('Manager Approval');
-        setMonths(availableMonths.map(m => ({ label: m, value: m })));
       } catch (err) {
         console.error('Failed to initialize KUP page');
       } finally {
@@ -1186,9 +1156,9 @@ const KupGlobalPage = () => {
         )}
 
         {/* Tab content */}
-        {activeTab === 'My Report' && <MyReportView months={months} />}
-        {activeTab === 'Manager Approval' && isManager && <ManagerApprovalView months={months} />}
-        {activeTab === 'Audit Log' && isManager && <AuditLogView months={months} />}
+        {activeTab === 'My Report' && <MyReportView />}
+        {activeTab === 'Manager Approval' && isManager && <ManagerApprovalView />}
+        {activeTab === 'Audit Log' && isManager && <AuditLogView />}
       </Stack>
     </Box>
   );

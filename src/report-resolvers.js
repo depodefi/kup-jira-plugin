@@ -2,21 +2,16 @@ import Resolver from '@forge/resolver';
 import api, { route } from '@forge/api';
 import kvs from '@forge/kvs';
 import { logSafe, safeErrorCode } from './safe-logger.js';
-import { DEFAULT_WORKING_HOURS, defaultAvailableMonths } from './kup-defaults.js';
+import { resolveWorkingHours, defaultAvailableMonths } from './kup-defaults.js';
 import { requireActiveLicense } from './license-guard.js';
 
-const MONTH_REGEX = /^\d{4}-\d{2}-KUP$/;
+import { PERIOD_PATTERN as MONTH_REGEX } from './kup-period.js';
 
 const kupReportResolver = new Resolver();
 
-// 1. Get available months config for the dropdown
+// 1. Calendar months for the legacy report dropdown
 kupReportResolver.define('getAvailableMonths', async () => {
-  const config = await kvs.get('kup_config');
-  let availableMonths = config?.availableMonths;
-  if (!availableMonths || availableMonths.length === 0) {
-    availableMonths = defaultAvailableMonths();
-  }
-  return availableMonths;
+  return defaultAvailableMonths();
 });
 
 // 2. Run JQL to fetch all issues assigned to current user matching the specified month
@@ -61,7 +56,7 @@ kupReportResolver.define('getMyKupReport', async ({ payload, context }) => {
     });
 
     const config = await kvs.get('kup_config');
-    const workingHoursMap = config?.monthWorkingHours || DEFAULT_WORKING_HOURS;
+    const workingHoursMap = resolveWorkingHours(config);
     const maxWorkingHours = workingHoursMap[month] ?? null;
 
     return {
