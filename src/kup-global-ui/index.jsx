@@ -1,5 +1,7 @@
+import { t, numberText, dateText, monthText, initializeLocale, invoke } from '../i18n-ui.js';
 import { PeriodPicker } from '../period-picker.jsx';
 import { AllocateHours } from '../allocate-hours.jsx';
+import { translate, formatDate } from '../i18n.js';
 import { defaultKupPeriod } from '../kup-period.js';
 import { useLicenseStatus } from '../use-license-status.js';
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
@@ -7,22 +9,11 @@ import ForgeReconciler, {
   Box, Stack, Inline, Heading, Select, DynamicTable, Spinner,
   Text, Strong, Button, SectionMessage, Lozenge, Link, Label, UserPicker, Textfield,
 } from '@forge/react';
-import { invoke } from '@forge/bridge';
 
 // ---------------------------------------------------------------------------
 // Helpers shared across views
 // ---------------------------------------------------------------------------
-const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'];
-
-// "2026-05" -> "May 2026"
-const formatMonthLabel = (raw) => {
-  if (!raw) return '';
-  const [y, m] = raw.split('-');
-  const idx = Number(m) - 1;
-  if (idx < 0 || idx > 11) return raw;
-  return `${MONTH_NAMES[idx]} ${y}`;
-};
+const formatMonthLabel = raw => monthText(raw);
 
 const currentMonthDefault = () => {
   const period = defaultKupPeriod();
@@ -31,11 +22,11 @@ const currentMonthDefault = () => {
 
 // Lozenge appearance + label from adjusted KUP %.
 const computeStatus = (pct, cap) => {
-  if (pct == null || isNaN(pct)) return { appearance: 'default', label: 'No data' };
-  if (cap > 0 && pct > cap) return { appearance: 'removed', label: 'Over limit' };
-  if (cap > 0 && pct > cap * 0.9) return { appearance: 'moved', label: 'Approaching limit' };
-  if (pct < 1) return { appearance: 'default', label: 'No activity' };
-  return { appearance: 'success', label: 'On track' };
+  if (pct == null || isNaN(pct)) return { appearance: 'default', label: t("No data") };
+  if (cap > 0 && pct > cap) return { appearance: 'removed', label: t("Over limit") };
+  if (cap > 0 && pct > cap * 0.9) return { appearance: 'moved', label: t("Approaching limit") };
+  if (pct < 1) return { appearance: 'default', label: t("No activity") };
+  return { appearance: 'success', label: t("On track") };
 };
 
 // Tinted stat card built from Box primitives — UI Kit has no card component.
@@ -45,7 +36,7 @@ const StatCard = ({ label, value, suffix, footer, backgroundColor = 'color.backg
     <Stack space="space.100">
       <Text size="small" weight="bold" color="color.text.subtlest">{label}</Text>
       <Inline space="space.050" alignBlock="baseline">
-        <Heading size="large">{value}</Heading>
+        <Heading size="large">{numberText(value)}</Heading>
         {suffix && <Text size="medium" color="color.text.subtle">{suffix}</Text>}
       </Inline>
       <Box>{footer}</Box>
@@ -69,10 +60,10 @@ const triggerDownload = (base64Data, filename, mimeType) => {
   URL.revokeObjectURL(url);
 };
 
-const STATUS_FILTER_OPTIONS = [
-  { label: 'All', value: 'all' },
-  { label: 'Pending', value: 'pending' },
-  { label: 'Approved', value: 'approved' },
+const statusFilterOptions = () => [
+  { label: t("All"), value: 'all' },
+  { label: t("Pending"), value: 'pending' },
+  { label: t("Approved"), value: 'approved' },
 ];
 const UNREPORTED_ISSUE_LIMIT = 500;
 
@@ -133,7 +124,7 @@ const MyReportView = () => {
       setUnreportedTruncated(result.truncated === true);
     } catch (err) {
       setUnreportedIssues(null);
-      setUnreportedError(err.message || 'Unable to search Jira issues. Please try again.');
+      setUnreportedError(err.message || t("Unable to search Jira issues. Please try again."));
     } finally {
       setUnreportedLoading(false);
     }
@@ -144,11 +135,11 @@ const MyReportView = () => {
     const overtime = parseFloat(overtimeHours) || 0;
 
     if (absence < 0 || overtime < 0) {
-      setAdjustmentMessage({ type: 'error', text: 'Hours cannot be negative.' });
+      setAdjustmentMessage({ type: 'error', text: t("Hours cannot be negative.") });
       return;
     }
     if (reportData.maxWorkingHours != null && absence > reportData.maxWorkingHours) {
-      setAdjustmentMessage({ type: 'warning', text: `Absence hours cannot exceed max working hours (${reportData.maxWorkingHours}).` });
+      setAdjustmentMessage({ type: 'warning', text: t("Absence hours cannot exceed max working hours ({0}).", [reportData.maxWorkingHours]) });
       return;
     }
 
@@ -161,12 +152,12 @@ const MyReportView = () => {
         overtimeHours: overtime,
       });
       if (result.success) {
-        setAdjustmentMessage({ type: 'confirmation', text: 'Adjustment saved.' });
+        setAdjustmentMessage({ type: 'confirmation', text: t("Adjustment saved.") });
       } else {
-        setAdjustmentMessage({ type: 'error', text: result.error || 'Save failed.' });
+        setAdjustmentMessage({ type: 'error', text: result.error || t("Save failed.") });
       }
     } catch (err) {
-      setAdjustmentMessage({ type: 'error', text: err.message || 'Unexpected error.' });
+      setAdjustmentMessage({ type: 'error', text: err.message || t("Unexpected error.") });
     } finally {
       setAdjustmentSaving(false);
     }
@@ -199,7 +190,7 @@ const MyReportView = () => {
   const issueCount = reportData.issues?.length || 0;
   const baseFooter = hasAdjustment ? (
     <Text size="small" color="color.text.subtlest">
-      {maxWorking}h max − {absence}h absence{overtime > 0 ? ` + ${overtime}h overtime` : ''}
+      {t('Base: {0} h · Absence: {1} h · Overtime: {2} h', [numberText(maxWorking), numberText(absence), numberText(overtime)])}
     </Text>
   ) : (
     <Text size="small" color="color.text.subtlest">
@@ -209,13 +200,13 @@ const MyReportView = () => {
 
   const pctFooter = kupPctNum != null
     ? <Lozenge appearance={status.appearance}>{status.label}</Lozenge>
-    : <Text size="small" color="color.text.subtlest">No working hours set</Text>;
+    : <Text size="small" color="color.text.subtlest">{t("No working hours set")}</Text>;
 
   const head = {
     cells: [
-      { key: 'issue', content: 'Issue Key' },
-      { key: 'summary', content: 'Summary' },
-      { key: 'hours', content: 'KUP Hours' },
+      { key: 'issue', content: t("Issue Key") },
+      { key: 'summary', content: t("Summary") },
+      { key: 'hours', content: t("KUP Hours") },
     ],
   };
 
@@ -224,7 +215,7 @@ const MyReportView = () => {
     cells: [
       { key: 'issue', content: <Link href={`/browse/${issue.key}`} openNewTab={true}>{issue.key}</Link> },
       { key: 'summary', content: <Text>{issue.summary}</Text> },
-      { key: 'hours', content: <Strong>{issue.hours}</Strong> },
+      { key: 'hours', content: <Strong>{numberText(issue.hours)}</Strong> },
     ],
   }));
 
@@ -245,21 +236,19 @@ const MyReportView = () => {
           <Box padding="space.250" backgroundColor="color.background.neutral" xcss={{ borderRadius: 'radius.small' }}>
             <Stack space="space.200">
               <Inline spread="space-between" alignBlock="center">
-                <Heading size="small">Hours adjustment</Heading>
-                <Text size="small" color="color.text.subtle">
-                  Claim absence to reduce your base, or overtime to raise it.
-                </Text>
+                <Heading size="small">{t("Hours adjustment")}</Heading>
+                <Text size="small" color="color.text.subtle">{t("Claim absence to reduce your base, or overtime to raise it.")}</Text>
               </Inline>
 
               {isLocked && (
                 <SectionMessage appearance="information">
-                  <Text>Adjustments are locked — your hours for this month have been approved. Contact your manager to unapprove first.</Text>
+                  <Text>{t("Adjustments are locked — your hours for this month have been approved. Contact your manager to unapprove first.")}</Text>
                 </SectionMessage>
               )}
 
               <Inline space="space.200" alignBlock="end">
                 <Stack space="space.050">
-                  <Label labelFor="absence-hours">Absence hours this month</Label>
+                  <Label labelFor="absence-hours">{t("Absence hours this month")}</Label>
                   <Textfield
                     id="absence-hours"
                     name="absence-hours"
@@ -271,7 +260,7 @@ const MyReportView = () => {
                   />
                 </Stack>
                 <Stack space="space.050">
-                  <Label labelFor="overtime-hours">Overtime hours this month</Label>
+                  <Label labelFor="overtime-hours">{t("Overtime hours this month")}</Label>
                   <Textfield
                     id="overtime-hours"
                     name="overtime-hours"
@@ -283,7 +272,7 @@ const MyReportView = () => {
                   />
                 </Stack>
                 <Button appearance="primary" onClick={handleSaveAdjustment} isDisabled={adjustmentSaving || isLocked}>
-                  {adjustmentSaving ? 'Saving...' : 'Save adjustment'}
+                  {adjustmentSaving ? t("Saving...") : t("Save adjustment")}
                 </Button>
               </Inline>
 
@@ -298,25 +287,25 @@ const MyReportView = () => {
           {/* Three KPI cards */}
           <Inline space="space.200" alignBlock="stretch">
             <StatCard
-              label="KUP HOURS"
+              label={t("KUP HOURS")}
               value={reportData.totalHours ?? 0}
               suffix="h"
               footer={
                 <Text size="small" color="color.text.subtlest">
-                  across {issueCount} issue{issueCount === 1 ? '' : 's'}
+                  {t('Issues: {0}', [numberText(issueCount)])}
                 </Text>
               }
             />
             <StatCard
-              label={hasAdjustment ? 'EFFECTIVE BASE' : 'MAX WORKING HOURS'}
+              label={hasAdjustment ? t("EFFECTIVE BASE") : t("MAX WORKING HOURS")}
               value={hasAdjustment
-                ? (adjustedBase > 0 ? adjustedBase : 'N/A')
+                ? (adjustedBase > 0 ? adjustedBase : t("N/A"))
                 : (maxWorking || '—')}
               suffix={maxWorking ? 'h' : undefined}
               footer={baseFooter}
             />
             <StatCard
-              label="KUP %"
+              label={t("KUP %")}
               value={kupPctNum != null ? kupPctNum.toFixed(1) : '—'}
               suffix={kupPctNum != null ? '%' : undefined}
               footer={pctFooter}
@@ -328,19 +317,19 @@ const MyReportView = () => {
             <SectionMessage appearance="warning">
               <Text>
                 {kupLimitEnforcement === 'block'
-                  ? `Your KUP is ${kupPctNum.toFixed(1)}%, which exceeds the company limit of ${maxKupPercent}%. Your manager will not be able to approve your hours until this is resolved. You have ${remainingHours} KUP hours remaining.`
-                  : `Your KUP is ${kupPctNum.toFixed(1)}%, which exceeds the company limit of ${maxKupPercent}%. Your manager will see a warning when reviewing your hours.`}
+                  ? t("Your KUP is {0}%, which exceeds the company limit of {1}%. Your manager will not be able to approve your hours until this is resolved. You have {2} KUP hours remaining.", [numberText(kupPctNum, 1), numberText(maxKupPercent), numberText(remainingHours)])
+                  : t("Your KUP is {0}%, which exceeds the company limit of {1}%. Your manager will see a warning when reviewing your hours.", [numberText(kupPctNum, 1), numberText(maxKupPercent)])}
               </Text>
             </SectionMessage>
           )}
 
           {/* Issues table */}
           <Stack space="space.100">
-            <Heading size="small">Issues</Heading>
+            <Heading size="small">{t("Issues")}</Heading>
             <DynamicTable
               head={head}
               rows={rows}
-              emptyView="You have zero KUP hours logged on assigned issues for this month."
+              emptyView={t("You have zero KUP hours logged on assigned issues for this month.")}
             />
           </Stack>
 
@@ -351,13 +340,13 @@ const MyReportView = () => {
             <Stack space="space.200">
               <Inline spread="space-between" alignBlock="center">
                 <Stack space="space.050">
-                  <Heading size="small">Completed issues without KUP hours</Heading>
+                  <Heading size="small">{t("Completed issues without KUP hours")}</Heading>
                   <Text color="color.text.subtle">
-                    Find eligible issues assigned to you and completed in {selectedMonth ? formatMonthLabel(selectedMonth.value) : 'the selected month'} that do not have a KUP entry.
+                    {t('Find eligible issues assigned to you and completed in {0} that do not have a KUP entry.', [selectedMonth ? formatMonthLabel(selectedMonth.value) : t('the selected month')])}
                   </Text>
                 </Stack>
                 <Button onClick={handleFindUnreportedIssues} isDisabled={unreportedLoading}>
-                  {unreportedLoading ? 'Searching...' : unreportedIssues === null ? 'Find issues' : 'Refresh list'}
+                  {unreportedLoading ? t("Searching...") : unreportedIssues === null ? t("Find issues") : t("Refresh list")}
                 </Button>
               </Inline>
 
@@ -390,7 +379,7 @@ const MyReportView = () => {
 
               {unreportedTruncated && (
                 <SectionMessage appearance="information">
-                  <Text>Showing the first {UNREPORTED_ISSUE_LIMIT} matching issues.</Text>
+                  <Text>{t('Showing the first {0} matching issues.', [numberText(UNREPORTED_ISSUE_LIMIT)])}</Text>
                 </SectionMessage>
               )}
             </Stack>
@@ -404,13 +393,16 @@ const MyReportView = () => {
 // ---------------------------------------------------------------------------
 // Manager Approval view
 // ---------------------------------------------------------------------------
-const ALL_GROUPS_OPTION = { label: 'All users', value: null };
-const EXPORT_FORMAT_OPTIONS = [
-  { label: 'Excel (.xlsx)', value: 'xlsx' },
-  { label: 'CSV (.csv)', value: 'csv' },
+const allGroupsOption = () => ({ label: t("All users"), value: null });
+const exportFormatOptions = () => [
+  { label: t("Excel (.xlsx)"), value: 'xlsx' },
+  { label: t("CSV (.csv)"), value: 'csv' },
 ];
 
 const ManagerApprovalView = () => {
+  const STATUS_FILTER_OPTIONS = statusFilterOptions();
+  const ALL_GROUPS_OPTION = allGroupsOption();
+  const EXPORT_FORMAT_OPTIONS = exportFormatOptions();
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [statusFilter, setStatusFilter] = useState(STATUS_FILTER_OPTIONS[0]);
   const [reportData, setReportData] = useState(null);
@@ -456,7 +448,7 @@ const ManagerApprovalView = () => {
         if (typeof m === 'string') return { accountId: m, displayName: m };
         return {
           accountId: m.accountId || m.id || null,
-          displayName: m.displayName || m.name || m.accountId || m.id || 'Unknown',
+          displayName: m.displayName || m.name || m.accountId || m.id || t("Unknown"),
         };
       });
       setTeamMembers(normalized);
@@ -525,16 +517,14 @@ const ManagerApprovalView = () => {
       const result = await invoke('bulkApprove', { accountId: user.accountId, month: selectedMonth.value });
       if (result.success) {
         const n = result.approvedCount;
-        const text = result.warning
-          ? `Approved ${n} issue${n !== 1 ? 's' : ''} for ${user.displayName}. ⚠ ${result.warning}`
-          : `Approved ${n} issue${n !== 1 ? 's' : ''} for ${user.displayName}.`;
+        const text = t('Approved issues: {0}. Employee: {1}.', [numberText(n), user.displayName]) + (result.warning ? ` ⚠ ${result.warning}` : '');
         setActionMessage({ type: result.warning ? 'warning' : 'confirmation', text });
         await fetchReport();
       } else {
-        setActionMessage({ type: 'error', text: result.error || 'Approval failed.' });
+        setActionMessage({ type: 'error', text: result.error || t("Approval failed.") });
       }
     } catch (err) {
-      setActionMessage({ type: 'error', text: err.message || 'Unexpected error.' });
+      setActionMessage({ type: 'error', text: err.message || t("Unexpected error.") });
     } finally {
       setActionLoading(prev => ({ ...prev, [user.accountId]: false }));
     }
@@ -546,13 +536,13 @@ const ManagerApprovalView = () => {
       const result = await invoke('bulkUnapprove', { accountId: user.accountId, month: selectedMonth.value });
       if (result.success) {
         const n = result.unapprovedCount;
-        setActionMessage({ type: 'confirmation', text: `Unapproved ${n} issue${n !== 1 ? 's' : ''} for ${user.displayName}.` });
+        setActionMessage({ type: 'confirmation', text: t('Unapproved issues: {0}. Employee: {1}.', [numberText(n), user.displayName]) });
         await fetchReport();
       } else {
-        setActionMessage({ type: 'error', text: result.error || 'Unapproval failed.' });
+        setActionMessage({ type: 'error', text: result.error || t("Unapproval failed.") });
       }
     } catch (err) {
-      setActionMessage({ type: 'error', text: err.message || 'Unexpected error.' });
+      setActionMessage({ type: 'error', text: err.message || t("Unexpected error.") });
     } finally {
       setActionLoading(prev => ({ ...prev, [user.accountId]: false }));
     }
@@ -624,20 +614,20 @@ const ManagerApprovalView = () => {
             setExportStatus('ready');
           } else if (statusResult.status === 'error') {
             setExportStatus('error');
-            setExportErrorMsg(statusResult.message || 'Export failed.');
+            setExportErrorMsg(statusResult.message || t("Export failed."));
           } else {
             setTimeout(poll, POLL_INTERVAL_MS);
           }
         } catch (err) {
           setExportStatus('error');
-          setExportErrorMsg(err.message || 'Polling failed.');
+          setExportErrorMsg(err.message || t("Polling failed."));
         }
       };
 
       setTimeout(poll, POLL_INTERVAL_MS);
     } catch (err) {
       setExportStatus('error');
-      setExportErrorMsg(err.message || 'Unexpected error.');
+      setExportErrorMsg(err.message || t("Unexpected error."));
     }
   };
 
@@ -668,17 +658,17 @@ const ManagerApprovalView = () => {
 
   const head = {
     cells: [
-      { key: 'user', content: 'User', width: 16 },
+      { key: 'user', content: t("User"), width: 16 },
       // Expanded issue rows display their summary in this same column. Giving it
       // enough space prevents a long title from wrapping beside empty detail cells.
-      { key: 'issues', content: 'Issues / Summary', width: 30 },
-      { key: 'totalHours', content: 'KUP Hours', width: 8 },
-      { key: 'maxHours', content: 'Max Hours', width: 8 },
-      { key: 'absence', content: 'Absence', width: 7 },
-      { key: 'overtime', content: 'Overtime', width: 7 },
-      { key: 'kupPct', content: 'KUP %', width: 6 },
-      { key: 'status', content: 'Status', width: 9 },
-      { key: 'action', content: 'Action', width: 9 },
+      { key: 'issues', content: t("Issues / Summary"), width: 30 },
+      { key: 'totalHours', content: t("KUP Hours"), width: 8 },
+      { key: 'maxHours', content: t("Max Hours"), width: 8 },
+      { key: 'absence', content: t("Absence"), width: 7 },
+      { key: 'overtime', content: t("Overtime"), width: 7 },
+      { key: 'kupPct', content: t("KUP %"), width: 6 },
+      { key: 'status', content: t("Status"), width: 9 },
+      { key: 'action', content: t("Action"), width: 9 },
     ],
   };
 
@@ -695,9 +685,9 @@ const ManagerApprovalView = () => {
     let kupPct = '—';
     if (maxH > 0) {
       if (kupPctNum !== null) {
-        kupPct = !adj && fetchingAdjustments ? '…' : `${kupPctNum.toFixed(1)}%`;
+        kupPct = !adj && fetchingAdjustments ? '…' : `${numberText(kupPctNum, 1)}%`;
       } else {
-        kupPct = 'N/A';
+        kupPct = t("N/A");
       }
     }
 
@@ -706,8 +696,8 @@ const ManagerApprovalView = () => {
 
     const lozengeAppearance = user.status === 'approved' ? 'success'
       : user.status === 'mixed' ? 'moved' : 'default';
-    const lozengeLabel = user.status === 'approved' ? 'Approved'
-      : user.status === 'mixed' ? 'Mixed' : 'Pending';
+    const lozengeLabel = user.status === 'approved' ? t("Approved")
+      : user.status === 'mixed' ? t("Mixed") : t("Pending");
 
     rows.push({
       key: `user-${user.accountId}`,
@@ -720,27 +710,27 @@ const ManagerApprovalView = () => {
             </Button>
           ),
         },
-        { key: 'issues', content: <Text>{user.issueCount}</Text> },
-        { key: 'totalHours', content: <Strong>{user.totalHours}</Strong> },
-        { key: 'maxHours', content: <Text>{maxH ?? '—'}</Text> },
-        { key: 'absence', content: <Text>{absenceH !== null ? absenceH : '—'}</Text> },
-        { key: 'overtime', content: <Text>{overtimeH !== null ? overtimeH : '—'}</Text> },
+        { key: 'issues', content: <Text>{numberText(user.issueCount)}</Text> },
+        { key: 'totalHours', content: <Strong>{numberText(user.totalHours)}</Strong> },
+        { key: 'maxHours', content: <Text>{numberText(maxH)}</Text> },
+        { key: 'absence', content: <Text>{numberText(absenceH)}</Text> },
+        { key: 'overtime', content: <Text>{numberText(overtimeH)}</Text> },
         { key: 'kupPct', content: <Text>{kupPct}</Text> },
         {
           key: 'status',
           content: (
             <Inline space="space.100">
               <Lozenge appearance={lozengeAppearance}>{lozengeLabel}</Lozenge>
-              {userOverLimit && <Lozenge appearance="removed">Over limit</Lozenge>}
+              {userOverLimit && <Lozenge appearance="removed">{t("Over limit")}</Lozenge>}
             </Inline>
           ),
         },
         {
           key: 'action',
           content: user.status === 'approved'
-            ? <Button appearance="subtle" onClick={() => handleUnapprove(user)} isDisabled={isActioning}>{isActioning ? '...' : 'Unapprove'}</Button>
+            ? <Button appearance="subtle" onClick={() => handleUnapprove(user)} isDisabled={isActioning}>{isActioning ? '...' : t("Unapprove")}</Button>
             : <Button appearance="primary" onClick={() => handleApprove(user)} isDisabled={isActioning || approveBlocked}>
-                {isActioning ? '...' : approveBlocked ? `Blocked (${kupPct})` : 'Approve'}
+                {isActioning ? '...' : approveBlocked ? `Blocked (${kupPct})` : t("Approve")}
               </Button>,
         },
       ],
@@ -760,12 +750,12 @@ const ManagerApprovalView = () => {
               ),
             },
             { key: 'issues', content: <Text>{issue.summary}</Text> },
-            { key: 'totalHours', content: <Text>{issue.hours}</Text> },
+            { key: 'totalHours', content: <Text>{numberText(issue.hours)}</Text> },
             { key: 'maxHours', content: <Text> </Text> },
             { key: 'absence', content: <Text> </Text> },
             { key: 'overtime', content: <Text> </Text> },
             { key: 'kupPct', content: <Text> </Text> },
-            { key: 'status', content: <Lozenge appearance={issue.status === 'approved' ? 'success' : 'default'}>{issue.status === 'approved' ? 'Approved' : 'Pending'}</Lozenge> },
+            { key: 'status', content: <Lozenge appearance={issue.status === 'approved' ? 'success' : 'default'}>{issue.status === 'approved' ? t("Approved") : t("Pending")}</Lozenge> },
             { key: 'action', content: <Text> </Text> },
           ],
         });
@@ -775,10 +765,10 @@ const ManagerApprovalView = () => {
 
   const filtersActive = groupFilter.value || myTeamActive;
   let emptyView = filtersActive
-    ? 'No users match your current filters for this month.'
-    : 'No KUP hours logged for this month.';
+    ? t("No users match your current filters for this month.")
+    : t("No KUP hours logged for this month.");
   if (!filtersActive && statusFilter.value === 'pending' && users.length === 0 && reportData) {
-    emptyView = 'All KUP hours for this month have been approved.';
+    emptyView = t("All KUP hours for this month have been approved.");
   }
 
   return (
@@ -790,7 +780,7 @@ const ManagerApprovalView = () => {
             <PeriodPicker id="mgr-period" value={selectedMonth} onChange={setSelectedMonth} />
           </Stack>
           <Stack space="space.050">
-            <Label labelFor="mgr-status-filter">Status</Label>
+            <Label labelFor="mgr-status-filter">{t("Status")}</Label>
             <Select
               inputId="mgr-status-filter"
               options={STATUS_FILTER_OPTIONS}
@@ -800,7 +790,7 @@ const ManagerApprovalView = () => {
             />
           </Stack>
           <Stack space="space.050">
-            <Label labelFor="mgr-group-filter">Jira group</Label>
+            <Label labelFor="mgr-group-filter">{t("Jira group")}</Label>
             <Select
               inputId="mgr-group-filter"
               options={jiraGroups}
@@ -813,54 +803,54 @@ const ManagerApprovalView = () => {
             appearance={myTeamActive ? 'primary' : 'default'}
             onClick={() => setMyTeamActive(a => !a)}
           >
-            {myTeamActive ? 'My Team ✓' : 'My Team'}
+            {myTeamActive ? t("My Team ✓") : t("My Team")}
           </Button>
-          <Button onClick={fetchReport} isDisabled={fetching}>Refresh</Button>
+          <Button onClick={fetchReport} isDisabled={fetching}>{t("Refresh")}</Button>
         </Inline>
         <Button appearance="subtle" onClick={() => setShowTeamEditor(e => !e)}>
-          {showTeamEditor ? 'Hide team editor' : 'Manage my team'}
+          {showTeamEditor ? t("Hide team editor") : t("Manage my team")}
         </Button>
       </Inline>
 
       {myTeamActive && teamMembers.length === 0 && (
-        <Text>Your team is empty — add members below to use this filter.</Text>
+        <Text>{t("Your team is empty — add members below to use this filter.")}</Text>
       )}
 
       {/* Team editor panel */}
       {showTeamEditor && (
         <Box padding="space.250" backgroundColor="color.background.neutral" xcss={{ borderRadius: 'radius.small' }}>
           <Stack space="space.200">
-            <Heading size="small">My Team</Heading>
+            <Heading size="small">{t("My Team")}</Heading>
 
             {/* Add member */}
             <Inline space="space.200" alignBlock="end">
               <Stack space="space.050">
-                <Label labelFor="team-user-picker">Add member</Label>
+                <Label labelFor="team-user-picker">{t("Add member")}</Label>
                 <UserPicker
                   name="team-user-picker"
                   value={newMember}
                   onChange={setNewMember}
                 />
               </Stack>
-              <Button onClick={handleAddTeamMember} isDisabled={!newMember}>Add</Button>
+              <Button onClick={handleAddTeamMember} isDisabled={!newMember}>{t("Add")}</Button>
             </Inline>
 
             {/* Current members list */}
             {teamMembers.length === 0 ? (
-              <Text>No team members yet.</Text>
+              <Text>{t("No team members yet.")}</Text>
             ) : (
               <Stack space="space.100">
                 {teamMembers.map(member => (
                   <Inline key={member.accountId} space="space.200" alignBlock="center">
                     <Text><Strong>{member.displayName}</Strong></Text>
-                    <Button appearance="subtle" onClick={() => handleRemoveTeamMember(member.accountId)}>Remove</Button>
+                    <Button appearance="subtle" onClick={() => handleRemoveTeamMember(member.accountId)}>{t("Remove")}</Button>
                   </Inline>
                 ))}
               </Stack>
             )}
 
             <Button appearance="primary" onClick={handleSaveTeam} isDisabled={teamSaving}>
-              {teamSaving ? 'Saving...' : 'Save Team'}
+              {teamSaving ? t("Saving...") : t("Save Team")}
             </Button>
           </Stack>
         </Box>
@@ -870,27 +860,27 @@ const ManagerApprovalView = () => {
       {!fetching && reportData && (
         <Inline space="space.200" alignBlock="stretch">
           <StatCard
-            label="USERS"
+            label={t("USERS")}
             value={users.length}
-            footer={<Text size="small" color="color.text.subtlest">in current view</Text>}
+            footer={<Text size="small" color="color.text.subtlest">{t("in current view")}</Text>}
           />
           <StatCard
-            label="APPROVED"
+            label={t("APPROVED")}
             value={approvedCount}
-            footer={<Text size="small" color="color.text.subtlest">fully approved</Text>}
+            footer={<Text size="small" color="color.text.subtlest">{t("fully approved")}</Text>}
           />
           <StatCard
-            label="PENDING"
+            label={t("PENDING")}
             value={pendingCount}
-            footer={<Text size="small" color="color.text.subtlest">awaiting review</Text>}
+            footer={<Text size="small" color="color.text.subtlest">{t("awaiting review")}</Text>}
           />
           <StatCard
-            label="OVER LIMIT"
+            label={t("OVER LIMIT")}
             value={overLimitCount}
             backgroundColor={overLimitCount > 0 ? 'color.background.danger' : 'color.background.neutral'}
             footer={
               <Text size="small" color="color.text.subtlest">
-                {mgrMaxKupPercent ? `${mgrMaxKupPercent}% cap` : 'no cap set'}
+                {mgrMaxKupPercent ? `${mgrMaxKupPercent}% cap` : t("no cap set")}
               </Text>
             }
           />
@@ -913,7 +903,7 @@ const ManagerApprovalView = () => {
 
       {!fetching && reportData && users.length > 0 && (
         <Text size="small" color="color.text.subtlest">
-          <Strong>{users.length}</Strong> user{users.length !== 1 ? 's' : ''} · <Strong>{totalHoursAll}h</Strong> total logged · max working hours this month: <Strong>{maxH ?? '—'}</Strong>
+          {t('Users: {0} · Total hours: {1} · Monthly working hours: {2}', [numberText(users.length), numberText(totalHoursAll), numberText(maxH)])}
         </Text>
       )}
 
@@ -921,14 +911,12 @@ const ManagerApprovalView = () => {
       <Box padding="space.250" backgroundColor="color.background.neutral" xcss={{ borderRadius: 'radius.small' }}>
         <Stack space="space.200">
           <Inline spread="space-between" alignBlock="center">
-            <Heading size="small">Export Payroll Summary</Heading>
-            <Text size="small" color="color.text.subtle">
-              One row per employee with KUP hours, for accounting.
-            </Text>
+            <Heading size="small">{t("Export Payroll Summary")}</Heading>
+            <Text size="small" color="color.text.subtle">{t("One row per employee with KUP hours, for accounting.")}</Text>
           </Inline>
           <Inline space="space.200" alignBlock="end">
             <Stack space="space.050">
-              <Label labelFor="export-format-select">Format</Label>
+              <Label labelFor="export-format-select">{t("Format")}</Label>
               <Select
                 inputId="export-format-select"
                 options={EXPORT_FORMAT_OPTIONS}
@@ -942,7 +930,7 @@ const ManagerApprovalView = () => {
               onClick={handleExport}
               isDisabled={!selectedMonth || exportStatus === 'processing'}
             >
-              {exportStatus === 'processing' ? 'Generating...' : 'Generate Export'}
+              {exportStatus === 'processing' ? t("Generating...") : t("Generate Export")}
             </Button>
             {exportStatus === 'processing' && <Spinner size="small" />}
           </Inline>
@@ -950,7 +938,7 @@ const ManagerApprovalView = () => {
           {exportStatus === 'ready' && exportResult && (
             <SectionMessage appearance="confirmation">
               <Inline space="space.200" alignBlock="center">
-                <Text>Export ready.</Text>
+                <Text>{t("Export ready.")}</Text>
                 <Button
                   appearance="primary"
                   onClick={() => triggerDownload(
@@ -960,8 +948,7 @@ const ManagerApprovalView = () => {
                       ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                       : 'text/csv;charset=utf-8'
                   )}
-                >
-                  Download {exportResult.filename}
+                >{t("Download")}{exportResult.filename}
                 </Button>
               </Inline>
             </SectionMessage>
@@ -969,13 +956,13 @@ const ManagerApprovalView = () => {
 
           {exportStatus === 'error' && (
             <SectionMessage appearance="error">
-              <Text>Export failed: {exportErrorMsg}</Text>
+              <Text>{t('Export failed: {0}', [exportErrorMsg])}</Text>
             </SectionMessage>
           )}
 
           {exportStatus === 'timeout' && (
             <SectionMessage appearance="warning">
-              <Text>Export timed out after 60 seconds. Please try again or contact your administrator.</Text>
+              <Text>{t("Export timed out after 60 seconds. Please try again or contact your administrator.")}</Text>
             </SectionMessage>
           )}
         </Stack>
@@ -984,23 +971,23 @@ const ManagerApprovalView = () => {
       {/* Legacy records without stable employee attribution */}
       {!fetching && reportData?.unassignedIssues?.length > 0 && (
         <Stack space="space.200">
-          <Heading size="small">Unattributed Records ({reportData.unassignedIssues.length})</Heading>
-          <Text>These records were created before employee attribution was stored. Review them before approval or export.</Text>
+          <Heading size="small">{t('Unattributed Records ({0})', [numberText(reportData.unassignedIssues.length)])}</Heading>
+          <Text>{t("These records were created before employee attribution was stored. Review them before approval or export.")}</Text>
           <SectionMessage appearance="warning">
-            <Text>These issues have KUP hours logged but no assignee. Ping someone to claim them.</Text>
+            <Text>{t("These issues have KUP hours logged but no assignee. Ping someone to claim them.")}</Text>
           </SectionMessage>
           <DynamicTable
             head={{ cells: [
-              { key: 'key', content: 'Issue', width: 15 },
-              { key: 'summary', content: 'Summary', width: 60 },
-              { key: 'hours', content: 'KUP Hours', width: 15 },
+              { key: 'key', content: t("Issue"), width: 15 },
+              { key: 'summary', content: t("Summary"), width: 60 },
+              { key: 'hours', content: t("KUP Hours"), width: 15 },
             ]}}
             rows={reportData.unassignedIssues.map(issue => ({
               key: issue.key,
               cells: [
                 { key: 'key', content: <Link href={`/browse/${issue.key}`} openNewTab={true}>{issue.key}</Link> },
                 { key: 'summary', content: <Text>{issue.summary}</Text> },
-                { key: 'hours', content: <Text>{issue.hours}</Text> },
+                { key: 'hours', content: <Text>{numberText(issue.hours)}</Text> },
               ],
             }))}
           />
@@ -1016,14 +1003,7 @@ const ManagerApprovalView = () => {
 const MAX_ISSUE_CHIPS = 4;
 
 // "2026-05-14T10:32:00Z" -> "2026-05-14 · 10:32"
-const formatAuditDate = (iso) => {
-  const d = new Date(iso);
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mi = String(d.getMinutes()).padStart(2, '0');
-  return `${d.getFullYear()}-${mm}-${dd} · ${hh}:${mi}`;
-};
+const formatAuditDate = iso => dateText(iso);
 
 const AuditLogView = () => {
   const [selectedMonth, setSelectedMonth] = useState(null);
@@ -1051,11 +1031,12 @@ const AuditLogView = () => {
   const uniqueEmployees = new Set(entries.map(e => e.targetUserName)).size;
 
   const handleExportCsv = () => {
-    const headers = ['Date / Time', 'Manager', 'Action', 'Employee', 'Issue Count', 'Issue Keys'];
+    const exportText = key => translate(key, [], 'pl-PL');
+    const headers = ['Date / Time', 'Manager', 'Action', 'Employee', 'Issue Count', 'Issue Keys'].map(exportText);
     const csvRows = entries.map(e => [
-      formatAuditDate(e.timestamp),
+      formatDate(e.timestamp, 'pl-PL'),
       e.managerName,
-      e.action === 'approval' ? 'Approved' : 'Unapproved',
+      exportText(e.action === 'approval' ? 'Approved' : 'Unapproved'),
       e.targetUserName,
       e.issueCount,
       (e.issueKeys || []).join(' '),
@@ -1075,17 +1056,17 @@ const AuditLogView = () => {
 
   const head = {
     cells: [
-      { key: 'timestamp', content: 'Date / Time', width: 16 },
-      { key: 'manager', content: 'Manager', width: 16 },
-      { key: 'action', content: 'Action', width: 10 },
-      { key: 'employee', content: 'Employee', width: 16 },
-      { key: 'issues', content: 'Issues', width: 42 },
+      { key: 'timestamp', content: t("Date / Time"), width: 16 },
+      { key: 'manager', content: t("Manager"), width: 16 },
+      { key: 'action', content: t("Action"), width: 10 },
+      { key: 'employee', content: t("Employee"), width: 16 },
+      { key: 'issues', content: t("Issues"), width: 42 },
     ],
   };
 
   const rows = entries.map((entry, i) => {
     const actionAppearance = entry.action === 'approval' ? 'success' : 'default';
-    const actionLabel = entry.action === 'approval' ? 'Approved' : 'Unapproved';
+    const actionLabel = entry.action === 'approval' ? t("Approved") : t("Unapproved");
     const issueKeys = entry.issueKeys || [];
 
     return {
@@ -1100,13 +1081,13 @@ const AuditLogView = () => {
           content: (
             <Inline space="space.100" alignBlock="center" shouldWrap>
               <Text size="small" weight="bold" color="color.text.subtlest">
-                {entry.issueCount} issue{entry.issueCount !== 1 ? 's' : ''}
+                {t('Issues: {0}', [numberText(entry.issueCount)])}
               </Text>
               {issueKeys.slice(0, MAX_ISSUE_CHIPS).map(k => (
                 <Link key={k} href={`/browse/${k}`} openNewTab={true}>{k}</Link>
               ))}
               {issueKeys.length > MAX_ISSUE_CHIPS && (
-                <Text size="small" color="color.text.subtlest">+ {issueKeys.length - MAX_ISSUE_CHIPS} more</Text>
+                <Text size="small" color="color.text.subtlest">+ {issueKeys.length - MAX_ISSUE_CHIPS}{" "}{t("more")}</Text>
               )}
             </Inline>
           ),
@@ -1122,9 +1103,7 @@ const AuditLogView = () => {
         <Stack space="space.050">
           <PeriodPicker id="audit-period" value={selectedMonth} onChange={setSelectedMonth} />
         </Stack>
-        <Button onClick={handleExportCsv} isDisabled={fetching || entries.length === 0}>
-          Export CSV
-        </Button>
+        <Button onClick={handleExportCsv} isDisabled={fetching || entries.length === 0}>{t("Export CSV")}</Button>
       </Inline>
 
       {fetching ? (
@@ -1134,7 +1113,7 @@ const AuditLogView = () => {
           {/* Summary strip */}
           <Inline space="space.200" alignBlock="stretch">
             <StatCard
-              label="TOTAL ACTIONS"
+              label={t("TOTAL ACTIONS")}
               value={entries.length}
               footer={
                 <Text size="small" color="color.text.subtlest">
@@ -1143,21 +1122,21 @@ const AuditLogView = () => {
               }
             />
             <StatCard
-              label="APPROVALS"
+              label={t("APPROVALS")}
               value={approvals}
-              footer={<Text size="small" color="color.text.subtlest">hours signed off</Text>}
+              footer={<Text size="small" color="color.text.subtlest">{t("hours signed off")}</Text>}
             />
             <StatCard
-              label="UNAPPROVALS"
+              label={t("UNAPPROVALS")}
               value={unapprovals}
-              footer={<Text size="small" color="color.text.subtlest">reversals</Text>}
+              footer={<Text size="small" color="color.text.subtlest">{t("reversals")}</Text>}
             />
             <StatCard
-              label="ACTIVE MANAGERS"
+              label={t("ACTIVE MANAGERS")}
               value={uniqueManagers}
               footer={
                 <Text size="small" color="color.text.subtlest">
-                  {uniqueEmployees} employee{uniqueEmployees !== 1 ? 's' : ''} affected
+                  {t('Affected employees: {0}', [numberText(uniqueEmployees)])}
                 </Text>
               }
             />
@@ -1166,7 +1145,7 @@ const AuditLogView = () => {
           <DynamicTable
             head={head}
             rows={rows}
-            emptyView="No approval actions recorded for this month."
+            emptyView={t("No approval actions recorded for this month.")}
           />
         </Stack>
       )}
@@ -1212,7 +1191,7 @@ const KupGlobalPage = () => {
       <Box padding="space.400">
         <SectionMessage appearance="warning" title={licenseMessage.title}>
           <Text>{licenseMessage.text}</Text>
-          <Button onClick={checkLicense}>Spróbuj ponownie</Button>
+          <Button onClick={checkLicense}>{t("Try again")}</Button>
         </SectionMessage>
       </Box>
     );
@@ -1233,7 +1212,7 @@ const KupGlobalPage = () => {
                 appearance={activeTab === tab ? 'primary' : 'subtle'}
                 onClick={() => setActiveTab(tab)}
               >
-                {tab}
+                {t(tab)}
               </Button>
             ))}
           </Inline>
@@ -1248,4 +1227,4 @@ const KupGlobalPage = () => {
   );
 };
 
-ForgeReconciler.render(<KupGlobalPage />);
+initializeLocale().then(() => ForgeReconciler.render(<KupGlobalPage />));

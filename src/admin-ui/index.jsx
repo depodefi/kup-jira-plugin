@@ -1,9 +1,9 @@
+import { t, numberText, monthText, initializeLocale, invoke } from '../i18n-ui.js';
 import { useLicenseStatus } from '../use-license-status.js';
 import React, { useEffect, useRef, useState } from 'react';
 import ForgeReconciler, {
   Text, Select, Toggle, Button, Box, Stack, Inline, Heading, SectionMessage, Label, DynamicTable, Textfield, UserPicker, Lozenge
 } from '@forge/react';
-import { invoke } from '@forge/bridge';
 import { DEFAULT_WORKING_HOURS } from '../kup-defaults.js';
 
 /**
@@ -45,7 +45,7 @@ const AdminSettings = () => {
 
   // KUP percentage limit
   const [maxKupPercent, setMaxKupPercent] = useState('');
-  const [kupLimitEnforcement, setKupLimitEnforcement] = useState({ label: 'Warn only', value: 'warn' });
+  const [kupLimitEnforcement, setKupLimitEnforcement] = useState({ label: t("Warn only"), value: 'warn' });
 
   // Export field mappings
   const [customFields, setCustomFields] = useState([]);
@@ -53,8 +53,8 @@ const AdminSettings = () => {
   const [exportCostCenterField, setExportCostCenterField] = useState(null);
 
   const ENFORCEMENT_OPTIONS = [
-    { label: 'Warn only', value: 'warn' },
-    { label: 'Block approval', value: 'block' },
+    { label: t("Warn only"), value: 'warn' },
+    { label: t("Block approval"), value: 'block' },
   ];
 
   useEffect(() => {
@@ -90,7 +90,7 @@ const AdminSettings = () => {
           setExportCostCenterField(config.exportFieldMappings?.costCenter || null);
         }
       } catch (err) {
-        setErrorMSG('Failed to load configuration: ' + err.message);
+        setErrorMSG(t("Failed to load configuration: ") + err.message);
       } finally {
         setLoading(false);
         isLoaded.current = true;
@@ -127,10 +127,10 @@ const AdminSettings = () => {
         setSuccess(true);
         setHasUnsavedChanges(false);
       } else {
-        setErrorMSG('Failed to save configuration: ' + (result?.error || 'Unknown error'));
+        setErrorMSG(t("Failed to save configuration: ") + (result?.error || t("Unknown error")));
       }
     } catch (err) {
-      setErrorMSG('Failed to save configuration: ' + err.message);
+      setErrorMSG(t("Failed to save configuration: ") + err.message);
     } finally {
       setSaving(false);
     }
@@ -138,14 +138,14 @@ const AdminSettings = () => {
 
   // Data loading only starts for an active license. Otherwise `loading` stays
   // true, so it must not hide the inactive-license message below.
-  if (licenseActive === null || (licenseActive === true && loading)) return <Text>Loading configuration...</Text>;
+  if (licenseActive === null || (licenseActive === true && loading)) return <Text>{t("Loading configuration...")}</Text>;
 
   if (!licenseActive) {
     return (
       <Box padding="space.300">
         <SectionMessage appearance="warning" title={licenseMessage.title}>
           <Text>{licenseMessage.text}</Text>
-          <Button onClick={checkLicense}>Spróbuj ponownie</Button>
+          <Button onClick={checkLicense}>{t("Try again")}</Button>
         </SectionMessage>
       </Box>
     );
@@ -159,24 +159,24 @@ const AdminSettings = () => {
       {hasUnsavedChanges && (
         <Box paddingBlockEnd="space.200">
           <Inline space="space.100" alignBlock="center">
-            <Lozenge appearance="moved">Unsaved changes</Lozenge>
-            <Text>Save the configuration to apply your changes.</Text>
+            <Lozenge appearance="moved">{t("Unsaved changes")}</Lozenge>
+            <Text>{t("Save the configuration to apply your changes.")}</Text>
           </Inline>
         </Box>
       )}
-      <Heading size="small">Eligible Projects & Issue Types</Heading>
+      <Heading size="small">{t("Eligible Projects & Issue Types")}</Heading>
       
       {success && (
         <Box paddingBlock="space.200">
-          <SectionMessage title="Success" appearance="success">
-            <Text>Configuration saved successfully.</Text>
+          <SectionMessage title={t("Success")} appearance="success">
+            <Text>{t("Configuration saved successfully.")}</Text>
           </SectionMessage>
         </Box>
       )}
 
       {errorMSG && (
         <Box paddingBlock="space.200">
-          <SectionMessage title="Error" appearance="error">
+          <SectionMessage title={t("Error")} appearance="error">
             <Text>{errorMSG}</Text>
           </SectionMessage>
         </Box>
@@ -187,21 +187,21 @@ const AdminSettings = () => {
         <Inline space="space.150" alignBlock="center">
           <Toggle
             id="enable-all-toggle"
-            label="Enable KUP tracking for all projects and issue types"
+            label={t("Enable KUP tracking for all projects and issue types")}
             isChecked={enableAll}
             onChange={(e) => setEnableAll(e.target.checked)}
           />
           <Text>
             {enableAll
-              ? "KUP tracking is enabled for ALL projects & issue types"
-              : "KUP tracking is limited to selected projects & issue types"}
+              ? t("KUP tracking is enabled for ALL projects & issue types")
+              : t("KUP tracking is limited to selected projects & issue types")}
           </Text>
         </Inline>
 
         {!enableAll && (
           <Stack space="space.300">
             <Box>
-              <Label labelFor="project-select">Enable KUP Tracking for Projects</Label>
+              <Label labelFor="project-select">{t("Enable KUP Tracking for Projects")}</Label>
               <Select
                 inputId="project-select"
                 isMulti={true}
@@ -221,7 +221,7 @@ const AdminSettings = () => {
 
               return (
                 <Box key={projectId}>
-                  <Label labelFor={`issue-type-${projectId}`}>Issue Types for {project?.label}</Label>
+                  <Label labelFor={`issue-type-${projectId}`}>{t('Issue Types for {0}', [project?.label])}</Label>
                   <Select
                     inputId={`issue-type-${projectId}`}
                     isMulti={true}
@@ -244,13 +244,13 @@ const AdminSettings = () => {
         {/* Manager Role Configuration + KUP Percentage Limit side by side */}
         <Inline space="space.400" alignBlock="start">
           <Box paddingBlockStart="space.200">
-            <Heading size="small">KUP Manager Roles</Heading>
-            <Text>Managers can view compliance reports for all users. Assign individual users or entire groups.</Text>
+            <Heading size="small">{t("KUP Manager Roles")}</Heading>
+            <Text>{t("Managers can view compliance reports for all users. Assign individual users or entire groups.")}</Text>
             <Stack space="space.200">
               <Box>
                 <UserPicker
                   name="manager-users"
-                  label="Individual Manager Users"
+                  label={t("Individual Manager Users")}
                   isMulti={true}
                   defaultValue={managerUsers}
                   onChange={(value) => {
@@ -265,7 +265,7 @@ const AdminSettings = () => {
                 />
               </Box>
               <Box>
-                <Label labelFor="manager-groups">Manager Groups</Label>
+                <Label labelFor="manager-groups">{t("Manager Groups")}</Label>
                 <Select
                   inputId="manager-groups"
                   isMulti={true}
@@ -278,11 +278,11 @@ const AdminSettings = () => {
           </Box>
 
           <Box paddingBlockStart="space.200">
-            <Heading size="small">KUP Percentage Limit</Heading>
-            <Text>Set a company-wide cap on how much KUP an employee can claim. Leave empty or 0 to disable.</Text>
+            <Heading size="small">{t("KUP Percentage Limit")}</Heading>
+            <Text>{t("Set a company-wide cap on how much KUP an employee can claim. Leave empty or 0 to disable.")}</Text>
             <Stack space="space.200">
               <Stack space="space.050">
-                <Label labelFor="max-kup-percent">Maximum KUP % (0–100, leave empty to disable)</Label>
+                <Label labelFor="max-kup-percent">{t("Maximum KUP % (0–100, leave empty to disable)")}</Label>
                 <Textfield
                   id="max-kup-percent"
                   name="max-kup-percent"
@@ -294,7 +294,7 @@ const AdminSettings = () => {
                 />
               </Stack>
               <Stack space="space.050">
-                <Label labelFor="enforcement-mode">Enforcement mode</Label>
+                <Label labelFor="enforcement-mode">{t("Enforcement mode")}</Label>
                 <Select
                   inputId="enforcement-mode"
                   options={ENFORCEMENT_OPTIONS}
@@ -309,29 +309,29 @@ const AdminSettings = () => {
 
         {/* Export Field Mappings */}
         <Box paddingBlockStart="space.200">
-          <Heading size="small">Payroll Export Field Mappings</Heading>
-          <Text>Map optional Jira custom fields to payroll export columns. Leave unmapped to omit the column from exports.</Text>
+          <Heading size="small">{t("Payroll Export Field Mappings")}</Heading>
+          <Text>{t("Map optional Jira custom fields to payroll export columns. Leave unmapped to omit the column from exports.")}</Text>
           <Stack space="space.200">
             <Box>
-              <Label labelFor="export-employee-id">Map Employee ID to issue field</Label>
+              <Label labelFor="export-employee-id">{t("Map Employee ID to issue field")}</Label>
               <Select
                 inputId="export-employee-id"
                 options={customFields}
                 value={customFields.find(f => f.value === exportEmployeeIdField) || null}
                 onChange={opt => setExportEmployeeIdField(opt ? opt.value : null)}
                 isClearable={true}
-                placeholder="Not mapped (column omitted)"
+                placeholder={t("Not mapped (column omitted)")}
               />
             </Box>
             <Box>
-              <Label labelFor="export-cost-center">Map Cost Center to issue field</Label>
+              <Label labelFor="export-cost-center">{t("Map Cost Center to issue field")}</Label>
               <Select
                 inputId="export-cost-center"
                 options={customFields}
                 value={customFields.find(f => f.value === exportCostCenterField) || null}
                 onChange={opt => setExportCostCenterField(opt ? opt.value : null)}
                 isClearable={true}
-                placeholder="Not mapped (column omitted)"
+                placeholder={t("Not mapped (column omitted)")}
               />
             </Box>
           </Stack>
@@ -339,38 +339,38 @@ const AdminSettings = () => {
 
         {/* Monthly working-hour baselines used for percentage calculations. */}
         <Box paddingBlockStart="space.200">
-          <Heading size="small">Monthly Working Hours</Heading>
-          <Text>Set the standard number of working hours for each month. These values are used to calculate KUP percentages. Defaults are based on the Polish public holiday calendar, and you can adjust them to match your organization’s working calendar.</Text>
+          <Heading size="small">{t("Monthly Working Hours")}</Heading>
+          <Text>{t("Set the standard number of working hours for each month. These values are used to calculate KUP percentages. Defaults are based on the Polish public holiday calendar, and you can adjust them to match your organization’s working calendar.")}</Text>
           <Inline space="space.100" alignBlock="center">
             <Text>{Object.keys(monthWorkingHours).length === 0
-              ? 'Using Polish calendar defaults'
-              : `${Object.keys(monthWorkingHours).length} custom override${Object.keys(monthWorkingHours).length === 1 ? '' : 's'}`}</Text>
+              ? t("Using Polish calendar defaults")
+              : t('Custom overrides: {0}', [numberText(Object.keys(monthWorkingHours).length)])}</Text>
             <Button appearance="subtle" onClick={() => setShowWorkingHours(current => !current)}>
-              {showWorkingHours ? 'Hide overrides' : 'Manage overrides'}
+              {showWorkingHours ? t("Hide overrides") : t("Manage overrides")}
             </Button>
           </Inline>
           {showWorkingHours && (
             <Stack space="space.100">
               {Object.keys(monthWorkingHours).length > 0 && (
                 <Inline spread="space-between" alignBlock="center">
-                  <Text>Only custom values are saved. Empty fields use the default shown beside them.</Text>
-                  <Button appearance="subtle" onClick={() => setMonthWorkingHours({})}>Reset all overrides</Button>
+                  <Text>{t("Only custom values are saved. Empty fields use the default shown beside them.")}</Text>
+                  <Button appearance="subtle" onClick={() => setMonthWorkingHours({})}>{t("Reset all overrides")}</Button>
                 </Inline>
               )}
               <DynamicTable
                 head={{
                   cells: [
-                    { key: 'month', content: 'Month', isSortable: true },
-                    { key: 'default', content: 'Polish calendar default', width: 20 },
-                    { key: 'override', content: 'Custom hours', width: 20 },
+                    { key: 'month', content: t("Month"), isSortable: true },
+                    { key: 'default', content: t("Polish calendar default"), width: 20 },
+                    { key: 'override', content: t("Custom hours"), width: 20 },
                     { key: 'action', content: '', width: 10 },
                   ]
                 }}
                 rows={ALL_MONTHS.map(month => ({
                   key: month,
                   cells: [
-                    { key: 'month', content: month },
-                    { key: 'default', content: String(DEFAULT_WORKING_HOURS[month] ?? '—') },
+                    { key: 'month', content: monthText(month) },
+                    { key: 'default', content: numberText(DEFAULT_WORKING_HOURS[month]) },
                     { key: 'override', content: (
                       <Textfield
                         id={`hours-${month}`}
@@ -393,7 +393,7 @@ const AdminSettings = () => {
                         const next = { ...prev };
                         delete next[month];
                         return next;
-                      })}>Reset</Button>
+                      })}>{t("Reset")}</Button>
                     ) : null },
                   ]
                 }))}
@@ -406,7 +406,7 @@ const AdminSettings = () => {
         {/* Explicit save */}
         <Box paddingBlockStart="space.300">
           <Button appearance="primary" onClick={handleSave}>
-            {saving ? 'Saving...' : 'Save Configuration'}
+            {saving ? t("Saving...") : t("Save Configuration")}
           </Button>
         </Box>
       </Stack>
@@ -414,4 +414,4 @@ const AdminSettings = () => {
   );
 };
 
-ForgeReconciler.render(<AdminSettings />);
+initializeLocale().then(() => ForgeReconciler.render(<AdminSettings />));

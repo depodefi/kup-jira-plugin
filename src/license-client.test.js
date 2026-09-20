@@ -14,7 +14,7 @@ it('recovers after a transport failure on retry without claiming expiration', as
   invoke.mockRejectedValueOnce(new Error('Network unavailable'))
     .mockResolvedValueOnce({ status: 'active' });
   await expect(fetchLicenseStatus()).resolves.toBe('error');
-  expect(LICENSE_MESSAGES.error.title).toBe('Nie udało się sprawdzić licencji');
+  expect(LICENSE_MESSAGES.error.title).toBe('Unable to check the license');
   await expect(fetchLicenseStatus()).resolves.toBe('active');
 });
 
@@ -24,6 +24,6 @@ it.each([undefined, {}, { status: 'unexpected' }])('treats an invalid response a
 });
 
 it('distinguishes missing information from confirmed inactivity in the UI', () => {
-  expect(LICENSE_MESSAGES.missing.title).toBe('Brak informacji o licencji');
-  expect(LICENSE_MESSAGES.inactive.title).toBe('Licencja jest nieaktywna');
+  expect(LICENSE_MESSAGES.missing.title).toBe('License information unavailable');
+  expect(LICENSE_MESSAGES.inactive.title).toBe('License is inactive');
 });

@@ -1,16 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Box, Inline, Label, Select } from '@forge/react';
-import { view } from '@forge/bridge';
+import { getLocale, t } from './i18n-ui.js';
 import { defaultKupPeriod, periodMonthOptions } from './kup-period.js';
 
 /** Shared issue/report picker. Changing either field produces exactly one
  * YYYY-MM value; rendering the suggested period never writes to Jira. */
 export function PeriodPicker({ id, value, onChange, isDisabled = false }) {
-  const [locale, setLocale] = useState('en');
-  useEffect(() => {
-    view.getContext().then(context => setLocale((context.locale || 'en').replace('_', '-'))).catch(() => {});
-  }, []);
-  const polish = locale.startsWith('pl');
+  const locale = getLocale();
   const [year, month] = (value?.value || defaultKupPeriod()).split('-');
   const currentYear = new Date().getFullYear();
   // Offer two correction years and one future year, in descending calendar order.
@@ -23,12 +19,12 @@ export function PeriodPicker({ id, value, onChange, isDisabled = false }) {
   return (
     <Inline space="space.100">
       <Box>
-        <Label labelFor={`${id}-year`}>{polish ? 'Rok' : 'Year'}</Label>
+        <Label labelFor={`${id}-year`}>{t('Year')}</Label>
         <Select inputId={`${id}-year`} options={years} value={years.find(option => option.value === year)}
           onChange={option => option && change(`${option.value}-${month}`)} isDisabled={isDisabled} isClearable={false} />
       </Box>
       <Box>
-        <Label labelFor={`${id}-month`}>{polish ? 'Miesiąc' : 'Month'}</Label>
+        <Label labelFor={`${id}-month`}>{t('Month')}</Label>
         <Select inputId={`${id}-month`} options={months} value={months.find(option => option.value === month)}
           onChange={option => option && change(`${year}-${option.value}`)} isDisabled={isDisabled} isClearable={false} />
       </Box>

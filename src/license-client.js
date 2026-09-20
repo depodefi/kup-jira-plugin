@@ -2,16 +2,16 @@ import { invoke } from '@forge/bridge';
 
 export const LICENSE_MESSAGES = {
   inactive: {
-    title: 'Licencja jest nieaktywna',
-    text: 'Atlassian zgłasza nieaktywną licencję KUP 50% Compliance. Poproś administratora Jira o sprawdzenie subskrypcji aplikacji w Atlassian Marketplace.',
+    title: 'License is inactive',
+    text: 'Atlassian reports an inactive KUP 50% Compliance license. Ask your Jira administrator to check the app subscription in Atlassian Marketplace.',
   },
   missing: {
-    title: 'Brak informacji o licencji',
-    text: 'Atlassian nie udostępnił informacji o licencji dla tej instalacji. Nie oznacza to, że subskrypcja wygasła. Poproś administratora Jira o sprawdzenie instalacji i subskrypcji aplikacji.',
+    title: 'License information unavailable',
+    text: 'Atlassian did not provide license information for this installation. This does not mean the subscription has expired. Ask your Jira administrator to check the installation and subscription.',
   },
   error: {
-    title: 'Nie udało się sprawdzić licencji',
-    text: 'Wystąpił błąd weryfikacji licencji. Spróbuj ponownie. Ten komunikat nie oznacza wygaśnięcia subskrypcji.',
+    title: 'Unable to check the license',
+    text: 'License verification failed. Try again. This message does not mean the subscription has expired.',
   },
 };
 

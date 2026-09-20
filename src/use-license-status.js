@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchLicenseStatus, LICENSE_MESSAGES } from './license-client.js';
+import { t } from './i18n-ui.js';
 
 export function useLicenseStatus() {
   const [status, setStatus] = useState('loading');
@@ -17,9 +18,10 @@ export function useLicenseStatus() {
     return () => { request.current++; };
   }, [checkLicense]);
 
+  const message = LICENSE_MESSAGES[status] || LICENSE_MESSAGES.error;
   return {
     licenseActive: status === 'loading' ? null : status === 'active',
-    licenseMessage: LICENSE_MESSAGES[status] || LICENSE_MESSAGES.error,
+    licenseMessage: { title: t(message.title), text: t(message.text) },
     checkLicense,
   };
 }

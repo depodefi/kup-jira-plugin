@@ -10,7 +10,8 @@ modules:
       route: kup
   jira:adminPage:
     - key: kup-admin-settings
-      title: KUP 50% Configuration
+      title:
+        i18n: app.configuration
       resource: admin-ui
       render: native
       icon: resource:kup-icon;kup-icon.svg
@@ -68,6 +69,14 @@ modules:
     - key: privacyReportHandler
       handler: index.privacyReportHandler
       timeoutSeconds: 120
+translations:
+  resources:
+    - key: en-US
+      path: locales/en-US.json
+    - key: pl-PL
+      path: locales/pl-PL.json
+  fallback:
+    default: en-US
 resources:
   - key: admin-ui
     path: src/admin-ui/index.jsx

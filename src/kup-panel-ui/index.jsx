@@ -1,3 +1,4 @@
+import { t, numberText, dateText, monthText, initializeLocale, invoke } from '../i18n-ui.js';
 import { PeriodPicker } from '../period-picker.jsx';
 import { initialKupPeriod } from '../kup-period.js';
 import { useLicenseStatus } from '../use-license-status.js';
@@ -6,7 +7,15 @@ import ForgeReconciler, {
   Text, Select, Textfield, Button, Box, Stack, Inline, Heading, SectionMessage,
   Label, Spinner, Strong, Em, Lozenge, User
 } from '@forge/react';
-import { invoke, router } from '@forge/bridge';
+import { router } from '@forge/bridge';
+
+function formatActivityValue(field, value) {
+  if (value == null) return '—';
+  if (field === 'kupHours') return numberText(value);
+  if (field === 'kupMonth') return monthText(value);
+  if (field === 'status') return t(value === 'approved' ? 'Approved' : 'Pending');
+  return value;
+}
 
 /**
  * KUP Compliance Panel — renders inside the Jira Issue Context sidebar.
@@ -82,15 +91,15 @@ const KupPanel = () => {
     try {
       const result = await invoke('saveKupData', payload);
       if (result.success) {
-        setMessage({ type: 'success', text: 'KUP data saved successfully.' });
+        setMessage({ type: 'success', text: t("KUP data saved successfully.") });
         setEmployeeAccountId(result.kupData?.employeeAccountId || employeeAccountId);
         setCurrentAssigneeAccountId(result.kupData?.employeeAccountId || currentAssigneeAccountId);
         if (result.auditLog) setAuditLog(result.auditLog);
       } else {
-        setMessage({ type: 'error', text: result.error || 'Failed to save.' });
+        setMessage({ type: 'error', text: result.error || t("Failed to save.") });
       }
     } catch (err) {
-      setMessage({ type: 'error', text: err.message || 'Unexpected error.' });
+      setMessage({ type: 'error', text: err.message || t("Unexpected error.") });
     } finally {
       setSaving(false);
     }
@@ -104,25 +113,25 @@ const KupPanel = () => {
       <Box padding="space.200">
         <Stack space="space.200">
           <Box>
-            <Label labelFor="kup-month-select-loading">KUP Month</Label>
+            <Label labelFor="kup-month-select-loading">{t("KUP Month")}</Label>
             <Select
               inputId="kup-month-select-loading"
               options={[]}
-              placeholder="Loading..."
+              placeholder={t("Loading...")}
               isDisabled={true}
             />
           </Box>
           <Box>
-            <Label labelFor="kup-hours-input-loading">KUP Hours</Label>
+            <Label labelFor="kup-hours-input-loading">{t("KUP Hours")}</Label>
             <Textfield
               id="kup-hours-input-loading"
               type="number"
-              placeholder="Loading..."
+              placeholder={t("Loading...")}
               isDisabled={true}
             />
           </Box>
           <Box>
-            <Button appearance="primary" isDisabled={true}>Save KUP Data</Button>
+            <Button appearance="primary" isDisabled={true}>{t("Save KUP Data")}</Button>
           </Box>
         </Stack>
       </Box>
@@ -134,7 +143,7 @@ const KupPanel = () => {
       <Box padding="space.200">
         <SectionMessage appearance="warning" title={licenseMessage.title}>
           <Text>{licenseMessage.text}</Text>
-          <Button onClick={checkLicense}>Spróbuj ponownie</Button>
+          <Button onClick={checkLicense}>{t("Try again")}</Button>
         </SectionMessage>
       </Box>
     );
@@ -144,19 +153,14 @@ const KupPanel = () => {
   if (!eligible) {
     return (
       <Box padding="space.200">
-        <Text>KUP tracking is not configured for this issue type.</Text>
+        <Text>{t("KUP tracking is not configured for this issue type.")}</Text>
       </Box>
     );
   }
 
   const isApproved = approval?.status === 'approved';
 
-  const approvedAtFormatted = approval?.approvedAt
-    ? new Date(approval.approvedAt).toLocaleDateString('en-GB', {
-        day: '2-digit', month: 'short', year: 'numeric',
-        hour: '2-digit', minute: '2-digit'
-      })
-    : null;
+  const approvedAtFormatted = approval?.approvedAt ? dateText(approval.approvedAt) : null;
 
   // --- ELIGIBLE: FORM + AUDIT LOG ---
   return (
@@ -166,18 +170,18 @@ const KupPanel = () => {
         {isApproved && (
           <SectionMessage appearance="confirmation">
             <Inline space="space.050" alignBlock="center">
-              <Text>Approved by</Text>
+              <Text>{t("Approved by")}</Text>
               {approval.approvedBy
                 ? <User accountId={approval.approvedBy} />
-                : <Strong>{approval.approvedByName || 'a manager'}</Strong>}
-              <Text>on {approvedAtFormatted}</Text>
+                : <Strong>{approval.approvedByName || t("a manager")}</Strong>}
+              <Text>{t("on")}{" "}{approvedAtFormatted}</Text>
             </Inline>
           </SectionMessage>
         )}
 
         {/* Pending lozenge */}
         {!isApproved && approval?.status === 'pending' && (
-          <Inline><Lozenge appearance="inprogress">Pending approval</Lozenge></Inline>
+          <Inline><Lozenge appearance="inprogress">{t("Pending approval")}</Lozenge></Inline>
         )}
 
         {/* Save feedback */}
@@ -192,15 +196,15 @@ const KupPanel = () => {
         {/* KUP Month selector */}
         {employeeAccountId && (
           <Inline space="space.050" alignBlock="center">
-            <Text>KUP hours attributed to</Text>
+            <Text>{t("KUP hours attributed to")}</Text>
             <User accountId={employeeAccountId} />
           </Inline>
         )}
         {!isApproved && employeeAccountId && currentAssigneeAccountId
           && employeeAccountId !== currentAssigneeAccountId && (
-          <SectionMessage appearance="warning" title="Assignee changed">
+          <SectionMessage appearance="warning" title={t("Assignee changed")}>
             <Inline space="space.050" alignBlock="center">
-              <Text>Saving will move these KUP hours to the current assignee:</Text>
+              <Text>{t("Saving will move these KUP hours to the current assignee:")}</Text>
               <User accountId={currentAssigneeAccountId} />
             </Inline>
           </SectionMessage>
@@ -211,7 +215,7 @@ const KupPanel = () => {
 
         {/* KUP Hours input */}
         <Box>
-          <Label labelFor="kup-hours-input">KUP Hours</Label>
+          <Label labelFor="kup-hours-input">{t("KUP Hours")}</Label>
           <Textfield
             id="kup-hours-input"
             type="number"
@@ -220,7 +224,7 @@ const KupPanel = () => {
               const val = e.target.value;
               if (val === '' || Number(val) >= 0) setKupHours(val);
             }}
-            placeholder="e.g. 5"
+            placeholder="5"
             isDisabled={isApproved}
           />
         </Box>
@@ -229,7 +233,7 @@ const KupPanel = () => {
         {!isApproved && (
           <Box>
             <Button appearance="primary" onClick={handleSave} isDisabled={saving}>
-              {saving ? 'Saving...' : 'Save KUP Data'}
+              {saving ? t("Saving...") : t("Save KUP Data")}
             </Button>
           </Box>
         )}
@@ -237,35 +241,29 @@ const KupPanel = () => {
         {/* Link to the KUP 50% Compliance report */}
         {globalPagePath && (
           <Box>
-            <Button appearance="subtle" onClick={() => router.navigate(globalPagePath)}>
-              View KUP 50% Compliance Report →
-            </Button>
+            <Button appearance="subtle" onClick={() => router.navigate(globalPagePath)}>{t("View KUP 50% Compliance Report →")}</Button>
           </Box>
         )}
 
         {/* Compliance Audit Trail — loads after form is visible */}
         <Box paddingBlockStart="space.300">
           <Inline spread="space-between" alignBlock="center">
-            <Heading size="xsmall">Compliance Activity</Heading>
+            <Heading size="xsmall">{t("Compliance Activity")}</Heading>
             <Button appearance="subtle" onClick={() => setShowAuditLog(current => !current)}>
-              {showAuditLog ? 'Hide activity' : 'Show activity'}
+              {showAuditLog ? t("Hide activity") : t("Show activity")}
             </Button>
           </Inline>
           {showAuditLog && auditLog === null && <Spinner size="small" />}
           {showAuditLog && auditLog !== null && auditLog.length === 0 && (
-            <Text>No activity recorded yet.</Text>
+            <Text>{t("No activity recorded yet.")}</Text>
           )}
           {showAuditLog && auditLog !== null && auditLog.length > 0 && (
             <Stack space="space.100">
               {auditLog.slice().reverse().map((entry, idx) => {
-                const date = new Date(entry.timestamp);
-                const dateStr = date.toLocaleDateString('en-GB', {
-                  day: '2-digit', month: 'short', year: 'numeric',
-                  hour: '2-digit', minute: '2-digit'
-                });
+                const dateStr = dateText(entry.timestamp);
                 const fieldLabels = {
-                  kupMonth: 'KUP period',
-                  kupHours: 'KUP hours',
+                  kupMonth: t("KUP period"),
+                  kupHours: t("KUP hours"),
                 };
 
                 return (
@@ -275,19 +273,19 @@ const KupPanel = () => {
                         <Text><Em>{dateStr}</Em> —</Text>
                         {entry.userId
                           ? <User accountId={entry.userId} />
-                          : <Strong>{entry.userName || 'Unknown user'}</Strong>}
+                          : <Strong>{entry.userName || t("Unknown user")}</Strong>}
                       </Inline>
                       {Object.entries(entry.changes).map(([field, diff]) => (
                         field === 'employeeAccountId' ? (
                           <Inline key={field} space="space.050" alignBlock="center">
-                            <Text>• KUP hours owner:</Text>
+                            <Text>{t("• KUP hours owner:")}</Text>
                             {diff.from ? <User accountId={diff.from} /> : <Text>—</Text>}
                             <Text>→</Text>
                             {diff.to ? <User accountId={diff.to} /> : <Text>—</Text>}
                           </Inline>
                         ) : (
                           <Text key={field}>
-                            • {fieldLabels[field] || field}: {diff.from ?? '—'} → {diff.to ?? '—'}
+                            • {fieldLabels[field] || t(field === 'status' ? 'Status' : field)}: {formatActivityValue(field, diff.from)} → {formatActivityValue(field, diff.to)}
                           </Text>
                         )
                       ))}
@@ -303,4 +301,4 @@ const KupPanel = () => {
   );
 };
 
-ForgeReconciler.render(<KupPanel />);
+initializeLocale().then(() => ForgeReconciler.render(<KupPanel />));

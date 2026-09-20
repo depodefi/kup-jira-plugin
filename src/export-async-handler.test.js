@@ -77,4 +77,18 @@ describe('exportAsyncHandler', () => {
     // XLSX files are ZIP containers and therefore start with the PK signature.
     expect(Buffer.from(storedExport.data, 'base64').subarray(0, 2).toString()).toBe('PK');
   });
+
+  it('exports Polish payroll headers and statuses independently of the caller locale', async () => {
+    kvs.get.mockResolvedValueOnce({});
+    api.requestJira.mockResolvedValueOnce({ ok: true, json: async () => ({ issues: [{
+      fields: {},
+      properties: { 'kup-data': { kupHours: 8, employeeAccountId: 'employee-001' }, 'kup-approval': { status: 'approved' } },
+    }] }) });
+    await exportAsyncHandler({ body: { month: '2026-09', format: 'csv', requestedBy: 'manager-001', locale: 'en-US' } });
+    const csv = Buffer.from(kvs.set.mock.calls[0][1].data, 'base64').toString('utf8');
+    expect(csv).toContain('Imię,Nazwisko,Osoba zatwierdzająca,Godziny pracy,Godziny pracy twórczej,KUP %,Status zatwierdzenia');
+    expect(csv).toContain('Zatwierdzone');
+    expect(csv).not.toContain('First Name');
+    expect(csv).toContain('Ada,Lovelace');
+  });
 });

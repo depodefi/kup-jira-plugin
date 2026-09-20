@@ -5,6 +5,7 @@ import { resolveWorkingHours } from './kup-defaults.js';
 import { resolveUserNames } from './user-names.js';
 import { createRequestId, logSafe, safeErrorCode } from './safe-logger.js';
 import { hasActiveLicense } from './license-guard.js';
+import { translate } from './i18n.js';
 
 const adjustmentEntity = kvs.entity('user-monthly-adjustment');
 
@@ -15,7 +16,8 @@ function buildHeaders(enableKupLimit, exportFieldMappings) {
   h.push('Manager / Approver', 'Working Hours', 'Creative Hours');
   if (enableKupLimit) h.push('Capped Creative Hours');
   h.push('KUP %', 'Approval Status');
-  return h;
+  // Payroll files use a stable Polish schema regardless of who downloads them.
+  return h.map(header => translate(header, [], 'pl-PL'));
 }
 
 function rowToArray(row, enableKupLimit, exportFieldMappings) {
@@ -24,7 +26,7 @@ function rowToArray(row, enableKupLimit, exportFieldMappings) {
   if (exportFieldMappings.costCenter) cells.push(row.costCenter ?? '');
   cells.push(row.approver, row.workingHours, row.creativeHours);
   if (enableKupLimit) cells.push(row.cappedCreativeHours ?? '');
-  cells.push(row.kupPct, row.approvalStatus);
+  cells.push(row.kupPct, translate(row.approvalStatus, [], 'pl-PL'));
   return cells;
 }
 
@@ -39,7 +41,7 @@ async function generateXlsx(rows, month, enableKupLimit, exportFieldMappings) {
   // Sheet names are limited to 31 characters. The library returns a Buffer,
   // which is encoded here because Forge storage persists the export as text.
   const buffer = await writeExcelFile(sheetData, {
-    sheet: `KUP Payroll - ${month}`.slice(0, 31),
+    sheet: `KUP - ${month}`.slice(0, 31),
     columns,
   }).toBuffer();
   return buffer.toString('base64');
