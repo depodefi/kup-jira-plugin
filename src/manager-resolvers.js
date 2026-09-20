@@ -7,6 +7,7 @@ import { resolveUserNames } from './user-names.js';
 import { createRequestId, logSafe, safeErrorCode } from './safe-logger.js';
 import { trackPersonalData } from './privacy-data.js';
 import { requireActiveLicense } from './license-guard.js';
+import { saveAllocatedHours } from './allocation-resolver.js';
 
 const exportQueue = new Queue({ key: 'payroll-export-queue' });
 
@@ -19,6 +20,7 @@ const MAX_TEAM_MEMBERS = 100;
 const MAX_UNREPORTED_ISSUES = 500;
 
 const managerResolver = new Resolver();
+managerResolver.define('saveAllocatedHours', saveAllocatedHours);
 
 /**
  * Helper: Check whether the given accountId holds the KUP Manager role

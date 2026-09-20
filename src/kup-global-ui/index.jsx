@@ -1,4 +1,5 @@
 import { PeriodPicker } from '../period-picker.jsx';
+import { AllocateHours } from '../allocate-hours.jsx';
 import { defaultKupPeriod } from '../kup-period.js';
 import { useLicenseStatus } from '../use-license-status.js';
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
@@ -227,23 +228,6 @@ const MyReportView = () => {
     ],
   }));
 
-  const unreportedHead = {
-    cells: [
-      { key: 'issue', content: 'Issue Key' },
-      { key: 'summary', content: 'Summary' },
-      { key: 'resolved', content: 'Completed' },
-    ],
-  };
-
-  const unreportedRows = (unreportedIssues || []).map((issue, i) => ({
-    key: `unreported-${i}-${issue.key}`,
-    cells: [
-      { key: 'issue', content: <Link href={`/browse/${issue.key}`} openNewTab={true}>{issue.key}</Link> },
-      { key: 'summary', content: <Text>{issue.summary}</Text> },
-      { key: 'resolved', content: <Text>{issue.resolvedAt?.slice(0, 10) || '—'}</Text> },
-    ],
-  }));
-
   return (
     <Stack space="space.300">
       <Box xcss={{ maxWidth: '320px' }}>
@@ -384,10 +368,23 @@ const MyReportView = () => {
               )}
 
               {unreportedIssues !== null && (
-                <DynamicTable
-                  head={unreportedHead}
-                  rows={unreportedRows}
-                  emptyView="No completed issues without KUP hours were found for this month."
+                <AllocateHours
+                  key={selectedMonth.value}
+                  issues={unreportedIssues}
+                  month={selectedMonth.value}
+                  recordedHours={reportData.totalHours}
+                  effectiveBase={effectiveBase}
+                  maxPercent={maxKupPercent}
+                  onSaved={async () => {
+                    const [report, remaining] = await Promise.all([
+                      invoke('getMyKupReport', { month: selectedMonth.value }),
+                      invoke('getMyUnreportedIssues', { month: selectedMonth.value }),
+                    ]);
+                    if (remaining.error) throw new Error(remaining.error);
+                    setReportData(report);
+                    setUnreportedIssues(remaining.issues || []);
+                    setUnreportedTruncated(remaining.truncated === true);
+                  }}
                 />
               )}
 

@@ -218,6 +218,8 @@ Open **Apps → KUP Compliance** from the Jira top navigation. Employees see the
 
 If the report looks incomplete, use **Find issues** under **Completed issues without KUP hours**. The app searches for eligible Jira issues that are currently assigned to you, were resolved during the selected month, and do not have a saved KUP-hours entry. The search runs only when you press the button and respects your Jira permissions.
 
+To fill several issues at once, select the creative-work issues and choose **Distribute hours**. Enter the hours to add (not your entire monthly total), then choose **Split equally**. Review or edit each proposed value; their sum must match your entered total. The preview shows already recorded hours and the resulting monthly total, with warnings when the working-hour base or company limit is exceeded. Only **Confirm and save** writes the entries. Existing KUP records and approved issues are not overwritten, and each issue's assignee and eligibility are checked again. Any failed or uncertain saves are reported individually; close the dialog to refresh before trying again.
+
 If you're over the company limit, a warning explains whether your manager can still approve (warn mode) or not (block mode), and how many KUP hours you have left.
 
 ### Hours adjustment (absence & overtime)
